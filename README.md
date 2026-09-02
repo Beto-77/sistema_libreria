@@ -42,7 +42,7 @@ Para operación compartida real se debe añadir un backend con base de datos (po
 Coloca la imagen del QR proporcionada por BCP con este nombre:
 
 ```text
-public/qr-bcp.png
+public/codigo-qr.jpeg
 ```
 
 Después de confirmar una venta, el sistema mostrará automáticamente ese QR junto con el total a pagar. No se ha generado un QR nuevo para evitar usar datos bancarios incorrectos.
