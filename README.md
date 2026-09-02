@@ -10,6 +10,7 @@ Sistema pequeño de ventas para catálogos de hasta 100 productos.
 - Reportes de ventas, unidades y ticket promedio.
 - Exportación CSV.
 - Persistencia local en el navegador.
+- Comprobante de pago horizontal con monto y QR BCP.
 
 ## Uso local
 
@@ -35,3 +36,13 @@ Es posible que Windows solicite permitir Node/Vite en el Firewall privado.
 Esta primera versión guarda la información en `localStorage`. Eso significa que cada navegador mantiene una copia independiente: sirve para uso local o demostración, pero no sincroniza ventas entre dos equipos.
 
 Para operación compartida real se debe añadir un backend con base de datos (por ejemplo, Node + SQLite/PostgreSQL), autenticación para administrador y empleado, y servir la aplicación desde ese backend. La interfaz ya está separada por módulos para poder conectar esa API en el siguiente paso.
+
+## QR de pago
+
+Coloca la imagen del QR proporcionada por BCP con este nombre:
+
+```text
+public/qr-bcp.png
+```
+
+Después de confirmar una venta, el sistema mostrará automáticamente ese QR junto con el total a pagar. No se ha generado un QR nuevo para evitar usar datos bancarios incorrectos.
