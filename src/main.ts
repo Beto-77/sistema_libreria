@@ -19,7 +19,7 @@ let currentRole: Role = 'seller'
 let activeView = 'Inicio'
 let authUser: { id: string; email?: string } | null = null
 
-const money = (value: number) => `$${value.toFixed(2)}`
+const money = (value: number) => `Bs ${value.toFixed(2)}`
 const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole) }
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
 const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'] : ['Inicio', 'Ventas']
