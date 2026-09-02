@@ -7,3 +7,9 @@ export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 export const supabase = supabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null
+
+export async function checkSupabaseConnection() {
+  if (!supabase) return { connected: false, reason: 'missing-config' }
+  const { error } = await supabase.auth.getSession()
+  return { connected: !error, reason: error?.message }
+}

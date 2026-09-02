@@ -21,6 +21,12 @@ npm run dev
 
 Abre `http://localhost:5173` en la máquina administradora.
 
+## Configuración de Supabase
+
+La conexión local se configura en `.env.local`, usando como base `.env.example`. Las claves no se suben al repositorio.
+
+Para crear las tablas y permisos, abre el **SQL Editor** de tu proyecto Supabase, copia el contenido de `supabase/schema.sql` y ejecuta la consulta completa. Después se podrá activar el inicio de sesión real y la sincronización entre equipos.
+
 ## Acceso del empleado
 
 El servidor está configurado para escuchar en la red local. Para que un empleado acceda desde la misma Wi-Fi, inicia `npm run dev` en la máquina administradora y comparte su dirección IPv4, por ejemplo:
