@@ -38,6 +38,8 @@ Para crear las tablas y permisos, abre el **SQL Editor** de tu proyecto Supabase
 
 Si ya ejecutaste `schema.sql` antes de esta actualización, ejecuta también `supabase/migration-auth.sql`. Esta migración crea automáticamente un perfil Vendedor para cada usuario nuevo.
 
+Para activar el guardado compartido de ventas, ejecuta después `supabase/migration-sales.sql`. A partir de entonces, los productos, categorías y ventas se sincronizarán con Supabase para todos los usuarios autenticados.
+
 ## Acceso del empleado
 
 El servidor está configurado para escuchar en la red local. Para que un empleado acceda desde la misma Wi-Fi, inicia `npm run dev` en la máquina administradora y comparte su dirección IPv4, por ejemplo:
