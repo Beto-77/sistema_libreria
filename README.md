@@ -42,6 +42,8 @@ Si el usuario ya existía antes de activar el trigger, ejecuta `supabase/migrati
 
 Para activar el guardado compartido de ventas, ejecuta después `supabase/migration-sales.sql`. A partir de entonces, los productos, categorías y ventas se sincronizarán con Supabase para todos los usuarios autenticados.
 
+Si al guardar aparece `new row violates row-level security policy`, ejecuta `supabase/fix-admin-permissions.sql` reemplazando `CORREO_DEL_ADMIN` por el correo exacto del administrador. Esto crea los perfiles faltantes y aplica la policy usando el rol real de Supabase.
+
 ## Acceso del empleado
 
 El servidor está configurado para escuchar en la red local. Para que un empleado acceda desde la misma Wi-Fi, inicia `npm run dev` en la máquina administradora y comparte su dirección IPv4, por ejemplo:
@@ -70,6 +72,4 @@ Después de confirmar una venta, el sistema mostrará automáticamente ese QR ju
 
 ## Roles
 
-La aplicación inicia como **Vendedor**. Para cambiar a **Administrador**, abre el menú del perfil e introduce el PIN inicial `1234`. Puedes cambiarlo en `src/main.ts` antes de publicar una versión propia.
-
-Este PIN protege la interfaz local, pero no es autenticación de servidor. Para uso compartido por internet se recomienda conectar el sistema a un backend con usuarios, contraseñas cifradas y permisos del lado del servidor.
+El rol depende exclusivamente del perfil del usuario autenticado en Supabase. Los usuarios nuevos comienzan como **Vendedor**. Para convertir una cuenta en **Administrador**, actualiza su fila en `public.profiles` desde el SQL Editor. El botón de perfil sirve para cerrar sesión y cambiar de cuenta.
