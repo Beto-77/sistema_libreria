@@ -25,6 +25,15 @@ Abre `http://localhost:5173` en la máquina administradora.
 
 La conexión local se configura en `.env.local`, usando como base `.env.example`. Las claves no se suben al repositorio.
 
+En Netlify debes configurar las mismas variables en **Site configuration → Environment variables** para el contexto `Production`:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
+Después selecciona **Deploys → Trigger deploy → Clear cache and deploy site**. Netlify no puede leer `.env.local` porque ese archivo solo existe en tu computadora.
+
 Para crear las tablas y permisos, abre el **SQL Editor** de tu proyecto Supabase, copia el contenido de `supabase/schema.sql` y ejecuta la consulta completa. Después se podrá activar el inicio de sesión real y la sincronización entre equipos.
 
 Si ya ejecutaste `schema.sql` antes de esta actualización, ejecuta también `supabase/migration-auth.sql`. Esta migración crea automáticamente un perfil Vendedor para cada usuario nuevo.
