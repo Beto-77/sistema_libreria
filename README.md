@@ -46,3 +46,9 @@ public/codigo-qr.jpeg
 ```
 
 Después de confirmar una venta, el sistema mostrará automáticamente ese QR junto con el total a pagar. No se ha generado un QR nuevo para evitar usar datos bancarios incorrectos.
+
+## Roles
+
+La aplicación inicia como **Vendedor**. Para cambiar a **Administrador**, abre el menú del perfil e introduce el PIN inicial `1234`. Puedes cambiarlo en `src/main.ts` antes de publicar una versión propia.
+
+Este PIN protege la interfaz local, pero no es autenticación de servidor. Para uso compartido por internet se recomienda conectar el sistema a un backend con usuarios, contraseñas cifradas y permisos del lado del servidor.

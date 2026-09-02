@@ -14,7 +14,8 @@ const starterProducts: Product[] = [
 let products: Product[] = JSON.parse(localStorage.getItem('sv-products-ao') || JSON.stringify(starterProducts))
 let sales: Sale[] = JSON.parse(localStorage.getItem('sv-sales-ao') || '[]')
 let categories: string[] = JSON.parse(localStorage.getItem('sv-categories-ao') || JSON.stringify(['Papelería', 'Escritura', 'Libros', 'Manualidades', 'Otros']))
-let currentRole: Role = (localStorage.getItem('sv-role-ao') as Role) || 'admin'
+let currentRole: Role = 'seller'
+const adminPin = '1234'
 let activeView = 'Inicio'
 
 const money = (value: number) => `$${value.toFixed(2)}`
@@ -22,6 +23,8 @@ const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(pr
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
 const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'] : ['Inicio', 'Ventas']
 const icon = (value: string) => `<span class="nav-icon">${value}</span>`
+
+function showAdminAuth() { document.querySelector('#modal-root')!.innerHTML = `<div class="modal-backdrop"><section class="auth-modal"><button class="close" data-action="close" aria-label="Cerrar">×</button><p class="eyebrow">ACCESO RESTRINGIDO</p><h2>Modo Administrador</h2><p class="subtle">Introduce el PIN para acceder a las funciones administrativas.</p><form id="admin-auth-form"><label>PIN de administrador<input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Escribe tu PIN" required></label><p class="auth-error" hidden>PIN incorrecto. Inténtalo nuevamente.</p><div class="form-actions"><button class="outline" type="button" data-action="close">Cancelar</button><button class="primary" type="submit">Ingresar</button></div></form></section></div>`; document.querySelectorAll<HTMLElement>('[data-action="close"]').forEach((button) => button.addEventListener('click', closeModal)); document.querySelector<HTMLFormElement>('#admin-auth-form')!.addEventListener('submit', (event) => { event.preventDefault(); const form = event.target as HTMLFormElement; const pin = String(new FormData(form).get('pin') || ''); if (pin !== adminPin) { document.querySelector<HTMLElement>('.auth-error')!.hidden = false; form.reset(); form.querySelector<HTMLInputElement>('input')!.focus(); return } currentRole = 'admin'; persist(); closeModal(); render() }); document.querySelector<HTMLInputElement>('#admin-auth-form input')!.focus() }
 
 function render() {
   if (!allowedViews().includes(activeView)) activeView = 'Ventas'
@@ -34,7 +37,7 @@ function render() {
   applyRoleAccess()
 }
 
-function applyRoleAccess() { if (currentRole !== 'seller') return; document.querySelectorAll<HTMLElement>('[data-view]').forEach((item) => { if (['Productos', 'Inventario', 'Reportes'].includes(item.dataset.view || '')) item.remove() }) }
+function applyRoleAccess() { document.querySelector<HTMLElement>('[data-role="admin"]')?.addEventListener('click', (event) => { event.stopImmediatePropagation(); showAdminAuth() }, true); if (currentRole !== 'seller') return; document.querySelectorAll<HTMLElement>('[data-view]').forEach((item) => { if (['Productos', 'Inventario', 'Reportes'].includes(item.dataset.view || '')) item.remove() }) }
 
 function dashboard(revenue: number, count: number, lowStock: Product[]) { return `<section class="welcome-row"><div><p class="subtle">Resumen de tu negocio</p></div><button class="primary" data-action="new-sale">+ Nueva venta</button></section><div class="metric-grid"><article class="metric-card mint"><span>Ventas de hoy</span><strong>${money(revenue)}</strong><small class="positive">↑ ${count ? '12.4%' : '0%'} <em>vs. ayer</em></small><div class="sparkline">▁▂▁▃▂▄▃▅▆</div></article><article class="metric-card yellow"><span>Productos activos</span><strong>${products.length}</strong><small>de 100 disponibles</small><div class="progress"><i style="width:${products.length}%"></i></div></article><article class="metric-card coral"><span>Stock por reponer</span><strong>${lowStock.length}</strong><small class="warning">Requieren atención</small><div class="stock-dots">● ● ● ● ● ●</div></article></div><div class="dashboard-grid"><section class="panel sales-panel"><div class="panel-head"><div><h2>Actividad reciente</h2><p>Últimas ventas registradas</p></div><button class="text-button" data-view="Ventas">Ver todas →</button></div>${sales.length ? `<div class="sale-list">${sales.slice(-5).reverse().map(saleRow).join('')}</div>` : emptyState('Aún no hay ventas', 'Registra tu primera venta para verla aquí.')}</section><section class="panel"><div class="panel-head"><div><h2>Atención rápida</h2><p>Productos con stock bajo</p></div><button class="text-button" data-view="Inventario">Ver inventario →</button></div>${lowStock.length ? `<div class="low-list">${lowStock.slice(0, 4).map((product) => `<div class="low-item"><div class="product-avatar">${product.name.charAt(0)}</div><div><strong>${product.name}</strong><small>${product.sku}</small></div><b class="stock-badge">${product.stock} uds.</b></div>`).join('')}</div>` : emptyState('Todo en orden', 'No tienes productos por debajo del mínimo.')}</section></div>` }
 function saleRow(sale: Sale) { return `<div class="sale-row"><div class="sale-symbol">↗</div><div><strong>${sale.productName}</strong><small>${sale.quantity} unidad${sale.quantity > 1 ? 'es' : ''} · ${sale.date}</small></div><b>${money(sale.total)}</b></div>` }
