@@ -27,6 +27,8 @@ La conexión local se configura en `.env.local`, usando como base `.env.example`
 
 Para crear las tablas y permisos, abre el **SQL Editor** de tu proyecto Supabase, copia el contenido de `supabase/schema.sql` y ejecuta la consulta completa. Después se podrá activar el inicio de sesión real y la sincronización entre equipos.
 
+Si ya ejecutaste `schema.sql` antes de esta actualización, ejecuta también `supabase/migration-auth.sql`. Esta migración crea automáticamente un perfil Vendedor para cada usuario nuevo.
+
 ## Acceso del empleado
 
 El servidor está configurado para escuchar en la red local. Para que un empleado acceda desde la misma Wi-Fi, inicia `npm run dev` en la máquina administradora y comparte su dirección IPv4, por ejemplo:

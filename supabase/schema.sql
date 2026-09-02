@@ -52,3 +52,19 @@ create policy "Users read sales" on public.sales for select to authenticated usi
 create policy "Sellers create sales" on public.sales for insert to authenticated with check (seller_id = auth.uid());
 create policy "Users read sale items" on public.sale_items for select to authenticated using (exists (select 1 from public.sales where sales.id = sale_id and (sales.seller_id = auth.uid() or (select role from public.profiles where id = auth.uid()) = 'admin')));
 create policy "Sellers create sale items" on public.sale_items for insert to authenticated with check (exists (select 1 from public.sales where sales.id = sale_id and sales.seller_id = auth.uid()));
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name, role)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', ''), 'seller');
+  return new;
+end;
+$$;
+
+create or replace trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
