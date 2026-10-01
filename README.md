@@ -7,6 +7,7 @@ Sistema pequeño de ventas para catálogos de hasta 100 productos.
 - Ventas con descuento automático de inventario.
 - Alta y edición de productos.
 - Control de stock mínimo y alertas de reposición.
+- Historial de entradas, ventas, ajustes y devoluciones con usuario y saldo antes/después.
 - Reportes de ventas, unidades y ticket promedio.
 - Exportación CSV.
 - Persistencia local en el navegador.
