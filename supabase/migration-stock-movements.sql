@@ -143,5 +143,9 @@ begin
 end;
 $$;
 
+revoke all on function public.record_stock_change(bigint, integer, text, text) from public;
+revoke all on function public.record_stock_change(bigint, integer, text, text) from anon;
+revoke all on function public.create_sale(jsonb) from public;
+revoke all on function public.create_sale(jsonb) from anon;
 grant execute on function public.record_stock_change(bigint, integer, text, text) to authenticated;
 grant execute on function public.create_sale(jsonb) to authenticated;

@@ -47,7 +47,7 @@ const formatLongDate = (date = new Date()) => new Intl.DateTimeFormat('es-ES', {
 }).format(date).replace(/^\w/, (char) => char.toUpperCase())
 
 const money = (value: number) => `Bs ${value.toFixed(2)}`
-function appendStockMovement(product: Product, kind: MovementKind, delta: number, before: number, note = '', date = new Date().toISOString(), id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`) {
+function appendStockMovement(product: Product, kind: MovementKind, delta: number, before: number, note = '', date = new Date().toISOString(), id = `local-${crypto.randomUUID()}`) {
   stockMovements.unshift({ id, productId: product.id, productName: product.name, sku: product.sku, category: product.category, kind, delta, before, after: before + delta, note, date, actor: authUser?.email || roleName() })
 }
 function persist() {
@@ -215,7 +215,7 @@ function movementHistoryView() {
 }
 function showStockMovementModal() {
   const options = products.map((product) => `<option value="${product.id}">${product.name} · ${product.sku} · ${product.stock} uds.</option>`).join('')
-  document.querySelector<HTMLElement>('#modal-root')!.innerHTML = `<div class="modal-backdrop"><div class="modal"><button class="close" data-action="close" aria-label="Cerrar">×</button><p class="eyebrow">INVENTARIO</p><h2>Registrar movimiento</h2><p class="subtle">El ajuste acepta cantidades positivas o negativas.</p><form id="stock-movement-form"><label>Producto<select name="productId" required>${options}</select></label><label>Tipo de movimiento<select name="kind"><option value="entry">Entrada</option><option value="adjustment">Ajuste de inventario</option><option value="return">Devolución</option></select></label><label>Cantidad<input name="delta" type="number" step="1" value="1" required></label><label>Motivo<input name="note" maxlength="200" placeholder="Ej. Reposición de proveedor" /></label><div class="form-actions"><button class="outline" type="button" data-action="close">Cancelar</button><button class="primary" type="submit">Guardar movimiento</button></div></form></div></div>`
+  document.querySelector<HTMLElement>('#modal-root')!.innerHTML = `<div class="modal-backdrop"><div class="modal"><button class="close" data-action="close" aria-label="Cerrar">×</button><p class="eyebrow">INVENTARIO</p><h2>Registrar movimiento</h2><p class="subtle">El ajuste acepta cantidades positivas o negativas.</p><form id="stock-movement-form" data-kind="stock"><label>Producto<select name="productId" required>${options}</select></label><label>Tipo de movimiento<select name="kind"><option value="entry">Entrada</option><option value="adjustment">Ajuste de inventario</option><option value="return">Devolución</option></select></label><label>Cantidad<input name="delta" type="number" step="1" value="1" required></label><label>Motivo<input name="note" maxlength="200" placeholder="Ej. Reposición de proveedor" /></label><div class="form-actions"><button class="outline" type="button" data-action="close">Cancelar</button><button class="primary" type="submit">Guardar movimiento</button></div></form></div></div>`
   document.querySelector<HTMLFormElement>('#stock-movement-form')!.addEventListener('submit', handleStockMovementSubmit)
   document.querySelectorAll<HTMLElement>('[data-action="close"]').forEach((button) => button.addEventListener('click', closeModal))
   document.querySelector<HTMLElement>('.modal-backdrop')!.addEventListener('click', (event) => { if (event.target === event.currentTarget) closeModal() })
@@ -233,21 +233,28 @@ async function handleStockMovementSubmit(event: SubmitEvent) {
   if (product.stock + delta < 0) return showToast(`El ajuste dejaría el stock de ${product.name} por debajo de cero.`, 'error')
   const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
   submit.disabled = true
+  let needsCatalogFallback = false
+  let syncWarning = ''
   try {
     if (supabase) {
       const { error } = await supabase.rpc('record_stock_change', { p_product_id: product.id, p_delta: delta, p_movement_type: kind, p_note: note })
-      if (error) throw new Error(error.message)
+      if (error && ['PGRST202', '42883'].includes(error.code || '')) needsCatalogFallback = true
+      else if (error) throw new Error(error.message)
     }
     pendingMovementKind = kind
     pendingMovementNote = note
     product.stock += delta
     persist()
+    if (needsCatalogFallback && supabase) {
+      try { await syncCatalog() }
+      catch (error) { syncWarning = error instanceof Error ? `El movimiento quedó guardado localmente: ${error.message}` : 'El movimiento quedó guardado localmente, pero no se sincronizó.' }
+    }
     closeModal()
     render()
-    showToast('Movimiento de inventario registrado.')
+    showToast(syncWarning || 'Movimiento de inventario registrado.', syncWarning ? 'error' : 'success')
   } catch (error) {
     submit.disabled = false
-    showToast(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.', 'error')
+    showToast(error instanceof Error ? `No se sincronizó el movimiento con Supabase: ${error.message}` : 'No se pudo registrar el movimiento.', 'error')
   }
 }
 function refreshMovementRows() {
@@ -315,7 +322,7 @@ function showPayment(total: number) { document.querySelector('#modal-root')!.inn
 function setupSaleDetails() { const form = document.querySelector<HTMLFormElement>('#modal-form[data-kind="sale"]'); if (!form || form.dataset.detailsReady) return; form.dataset.detailsReady = 'true'; const productSelect = form.querySelector<HTMLSelectElement>('#sale-product')!; const productLabel = productSelect.closest('label')!; const quantityLabel = form.querySelector<HTMLInputElement>('[name="quantity"]')!.closest('label')!; const priceLabel = document.createElement('label'); priceLabel.innerHTML = 'Precio unitario<input id="sale-price" type="text" readonly aria-readonly="true">'; productLabel.after(priceLabel); const updatePrice = () => { const product = products.find((item) => item.id === Number(productSelect.value)); const price = priceLabel.querySelector<HTMLInputElement>('input')!; price.value = product ? money(product.price) : ''; productSelect.querySelectorAll('option').forEach((option) => { const item = products.find((entry) => entry.id === Number(option.value)); if (item) option.textContent = item.name }) }; productSelect.addEventListener('change', updatePrice); updatePrice(); quantityLabel.querySelector('input')!.setAttribute('aria-label', 'Cantidad de unidades'); }
 function setupSaleCart() { const form = document.querySelector<HTMLFormElement>('#modal-form[data-kind="sale"]'); if (!form || form.dataset.cartReady) return; form.dataset.cartReady = 'true'; const productSelect = form.querySelector<HTMLSelectElement>('#sale-product')!; const quantityInput = form.querySelector<HTMLInputElement>('[name="quantity"]')!; const actions = form.querySelector<HTMLElement>('.form-actions')!; const cart: { productId: number; quantity: number }[] = []; const cartBox = document.createElement('div'); cartBox.className = 'sale-cart'; cartBox.innerHTML = '<div class="cart-head"><strong>Productos de la venta</strong><span id="cart-count">0 productos</span></div><div id="cart-items" class="cart-items"></div><div class="cart-total"><span>Total a pagar</span><strong id="cart-total">$0.00</strong></div>'; const addButton = document.createElement('button'); addButton.className = 'outline add-product'; addButton.type = 'button'; addButton.textContent = '+ Agregar producto'; actions.before(addButton, cartBox); const renderCart = () => { const items = document.querySelector<HTMLElement>('#cart-items')!; const total = cart.reduce((sum, item) => { const product = products.find((entry) => entry.id === item.productId)!; return sum + product.price * item.quantity }, 0); items.innerHTML = cart.length ? cart.map((item) => { const product = products.find((entry) => entry.id === item.productId)!; return `<div class="cart-item"><div><strong>${product.name}</strong><small>${money(product.price)} × ${item.quantity}</small></div><b>${money(product.price * item.quantity)}</b><button type="button" data-remove-product="${product.id}" aria-label="Quitar producto">×</button></div>` }).join('') : '<p class="cart-empty">Agrega uno o más productos a la venta.</p>'; document.querySelector('#cart-count')!.textContent = `${cart.length} producto${cart.length === 1 ? '' : 's'}`; document.querySelector('#cart-total')!.textContent = money(total); document.querySelectorAll<HTMLElement>('[data-remove-product]').forEach((button) => button.addEventListener('click', () => { const index = cart.findIndex((item) => item.productId === Number(button.dataset.removeProduct)); if (index >= 0) cart.splice(index, 1); renderCart() })) }; addButton.addEventListener('click', () => { const product = products.find((entry) => entry.id === Number(productSelect.value)); const quantity = Number(quantityInput.value); if (!product || quantity < 1) return; const existing = cart.find((item) => item.productId === product.id); const nextQuantity = (existing?.quantity || 0) + quantity; if (nextQuantity > product.stock) return alert(`Solo hay ${product.stock} unidades disponibles.`); if (existing) existing.quantity = nextQuantity; else cart.push({ productId: product.id, quantity }); renderCart(); quantityInput.value = '1' }); form.addEventListener('submit', (event) => { if (!cart.length) return; event.preventDefault(); event.stopImmediatePropagation(); cart.forEach((item) => { const product = products.find((entry) => entry.id === item.productId)!; product.stock -= item.quantity; sales.push({ id: Date.now() + item.productId, productId: product.id, productName: product.name, quantity: item.quantity, total: product.price * item.quantity, date: new Date().toISOString().slice(0, 10) }) }); persist(); closeModal(); render() }, true); renderCart() }
 const modalObserver = new MutationObserver(() => { setupSaleDetails(); setupSaleCart(); if (sales.length > lastSalesCount) { const total = sales.slice(lastSalesCount).reduce((sum, sale) => sum + sale.total, 0); lastSalesCount = sales.length; showPayment(total); syncNewSales() } });
-document.addEventListener('submit', (event) => { const form = event.target as HTMLFormElement; if (form.id !== 'admin-auth-form' && form.dataset.kind !== 'sale') window.setTimeout(() => syncCloudWithFeedback(), 0) }, true);
+document.addEventListener('submit', (event) => { const form = event.target as HTMLFormElement; if (form.id !== 'admin-auth-form' && form.dataset.kind !== 'sale' && form.dataset.kind !== 'stock') window.setTimeout(() => syncCloudWithFeedback(), 0) }, true);
 document.addEventListener('input', (event) => {
   const target = event.target
   if (target instanceof HTMLInputElement && target.id === 'product-search') {

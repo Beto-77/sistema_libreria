@@ -42,6 +42,8 @@ Si el usuario ya existía antes de activar el trigger, ejecuta `supabase/migrati
 
 Para activar el guardado compartido de ventas, ejecuta después `supabase/migration-sales.sql`. A partir de entonces, los productos, categorías y ventas se sincronizarán con Supabase para todos los usuarios autenticados.
 
+Para habilitar el historial compartido de inventario, ejecuta `supabase/migration-stock-movements.sql` después de `migration-sales.sql`. La bitácora guarda movimientos nuevos; no inventa movimientos históricos que no se registraron antes de instalarla. Si no se aplica, la aplicación conserva el historial local en ese navegador.
+
 Si al guardar aparece `new row violates row-level security policy`, ejecuta `supabase/fix-admin-permissions.sql` reemplazando `CORREO_DEL_ADMIN` por el correo exacto del administrador. Esto crea los perfiles faltantes y aplica la policy usando el rol real de Supabase.
 
 ## Acceso del empleado
