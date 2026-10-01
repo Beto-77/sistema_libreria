@@ -152,7 +152,7 @@ function render() {
   const revenue = todaySales.reduce((sum, sale) => sum + sale.total, 0)
   const lowStock = products.filter((product) => product.stock <= product.min)
   const content = activeView === 'Inicio' ? dashboard(revenue, todaySales.length, lowStock) : activeView === 'Ventas' ? salesView() : activeView === 'Productos' ? productsView() : activeView === 'Inventario' ? inventoryView() : activeView === 'Movimientos' ? movementHistoryView() : reportsView()
-  document.querySelector<HTMLDivElement>('#app')!.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">A&O</div><div><strong>Librería A&O</strong><small>papelería y libros</small></div></div><nav>${['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'].map((item) => `<button class="nav-item ${activeView === item ? 'active' : ''}" data-view="${item}">${icon({ Inicio: '⌂', Ventas: '↗', Productos: '▦', Inventario: '◫', Reportes: '▥' }[item] || '')}<span>${item}</span></button>`).join('')}</nav><div class="sidebar-foot"><div class="avatar">AO</div><div><strong>${roleName()}</strong><small>Sesión local</small></div><button class="more">•••</button></div></aside><main><header><div><p class="eyebrow">${formatLongDate()}</p><h1>${activeView === 'Inicio' ? 'Buenos días, A&O' : activeView}</h1></div><div class="header-actions"><div class="profile-menu"><button class="profile" data-action="sign-out" aria-label="Cerrar sesión" title="Cerrar sesión">AO <span aria-hidden="true">↪</span></button></div></div></header>${content}</main></div><div id="modal-root"></div>`
+  document.querySelector<HTMLDivElement>('#app')!.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">A&O</div><div><strong>Librería A&O</strong><small>papelería y libros</small></div></div><nav>${['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'].map((item) => `<button class="nav-item ${activeView === item ? 'active' : ''}" data-view="${item}">${icon({ Inicio: '⌂', Ventas: '↗', Productos: '▦', Inventario: '◫', Reportes: '▥' }[item] || '')}<span>${item}</span></button>`).join('')}</nav><div class="sidebar-foot"><div class="avatar">AO</div><div><strong>${roleName()}</strong><small>Sesión local</small></div><button class="more">•••</button></div></aside><main><header><div><p class="eyebrow">${formatLongDate()}</p><h1>${activeView === 'Inicio' ? 'Buenos días, A&O' : activeView}</h1></div><div class="header-actions"><div class="profile-menu"><button class="profile" data-action="sign-out" aria-label="Cerrar sesión" title="Cerrar sesión">Cerrar sesión</button></div></div></header>${content}</main></div><div id="modal-root"></div>`
   if (currentRole === 'admin') document.querySelector('nav')?.insertAdjacentHTML('beforeend', `<button class="nav-item ${activeView === 'Movimientos' ? 'active' : ''}" data-view="Movimientos">${icon('⇄')}<span>Movimientos</span></button>`)
   bindEvents()
   applyRoleAccess()
@@ -161,17 +161,7 @@ function render() {
 function applyRoleAccess() {
   document.querySelector<HTMLElement>('.more')?.remove()
   document.querySelector<HTMLElement>('.role-menu')?.remove()
-  const previousProfileButton = document.querySelector<HTMLElement>('.profile')
-  if (previousProfileButton) {
-    const signOutButton = previousProfileButton.cloneNode(true) as HTMLButtonElement
-    signOutButton.dataset.action = 'sign-out'
-    signOutButton.removeAttribute('aria-expanded')
-    signOutButton.setAttribute('aria-label', 'Cerrar sesión')
-    signOutButton.title = 'Cerrar sesión'
-    signOutButton.innerHTML = 'AO <span aria-hidden="true">↪</span>'
-    signOutButton.addEventListener('click', () => signOut())
-    previousProfileButton.replaceWith(signOutButton)
-  }
+  document.querySelector<HTMLButtonElement>('[data-action="sign-out"]')?.addEventListener('click', () => signOut())
   if (currentRole === 'seller') {
     document.querySelectorAll<HTMLElement>('[data-view]').forEach((item) => {
       if (['Productos', 'Inventario', 'Movimientos', 'Reportes'].includes(item.dataset.view || '')) item.remove()

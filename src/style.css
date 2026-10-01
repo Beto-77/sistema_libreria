@@ -55,6 +55,9 @@ main { max-width:1240px; width:100%; margin:0 auto; padding:30px 18px 40px; } he
 	.inventory-product small { font-size:10px; }
 }
 .movement-panel .panel-head { align-items:flex-start; gap:16px; flex-wrap:wrap; }
+.header-actions .profile { display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:124px; height:38px; padding:0 14px; border:1px solid #d9e3e6; border-radius:7px; background:#fff; color:var(--green-dark); font-size:12px; font-weight:700; box-shadow:0 2px 7px rgba(29,48,73,.07); transition:background .18s ease,border-color .18s ease,transform .18s ease; }
+.header-actions .profile:hover { background:#f3f7f7; border-color:#9eb5be; transform:translateY(-1px); }
+.header-actions .profile:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
 .movement-filters { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
 .movement-filters>input,.movement-filters>select { min-width:145px; }
 .movement-filters>label { display:grid; gap:5px; color:var(--muted); font-size:10px; font-weight:600; }
