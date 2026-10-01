@@ -45,6 +45,8 @@ Para activar el guardado compartido de ventas, ejecuta después `supabase/migrat
 
 Para habilitar el historial compartido de inventario, ejecuta `supabase/migration-stock-movements.sql` después de `migration-sales.sql`. La bitácora guarda movimientos nuevos; no inventa movimientos históricos que no se registraron antes de instalarla. Si no se aplica, la aplicación conserva el historial local en ese navegador.
 
+Para habilitar el cierre de caja compartido y bloquear ventas del día en todos los equipos, ejecuta `supabase/migration-daily-closing.sql` después de `migration-stock-movements.sql`. El día operativo usa la zona horaria `America/La_Paz`; las ventas se reactivan automáticamente al día siguiente.
+
 Si al guardar aparece `new row violates row-level security policy`, ejecuta `supabase/fix-admin-permissions.sql` reemplazando `CORREO_DEL_ADMIN` por el correo exacto del administrador. Esto crea los perfiles faltantes y aplica la policy usando el rol real de Supabase.
 
 ## Acceso del empleado

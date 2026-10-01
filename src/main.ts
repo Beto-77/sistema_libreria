@@ -2,7 +2,8 @@ import './style.css'
 import { supabase } from './lib/supabase'
 
 type Product = { id: number; name: string; sku: string; category: string; price: number; stock: number; min: number }
-type Sale = { id: number; productId: number; productName: string; quantity: number; total: number; date: string }
+type Sale = { id: number; productId: number; productName: string; quantity: number; total: number; date: string; transactionId?: string }
+type DailyClosure = { businessDate: string; total: number; transactions: number; units: number; closedAt: string; closedBy: string }
 type MovementKind = 'entry' | 'sale' | 'adjustment' | 'return'
 type StockMovement = { id: string; productId: number; productName: string; sku: string; category: string; kind: MovementKind; delta: number; before: number; after: number; note: string; date: string; actor: string }
 type Role = 'admin' | 'seller'
@@ -16,6 +17,8 @@ const starterProducts: Product[] = [
 ]
 let products: Product[] = JSON.parse(localStorage.getItem('sv-products-ao') || JSON.stringify(starterProducts))
 let sales: Sale[] = JSON.parse(localStorage.getItem('sv-sales-ao') || '[]')
+let dailyClosures: DailyClosure[] = JSON.parse(localStorage.getItem('sv-daily-closures-ao') || '[]')
+let cloudDailyClosuresAvailable = false
 let stockMovements: StockMovement[] = JSON.parse(localStorage.getItem('sv-stock-movements-ao') || '[]')
 let lastPersistedStock = new Map(products.map((product) => [product.id, product.stock]))
 let lastPersistedSalesCount = sales.length
@@ -33,12 +36,17 @@ let activeView = 'Inicio'
 let authUser: { id: string; email?: string } | null = null
 let reportStartDate = ''
 let reportEndDate = ''
+let lastObservedBusinessDate = ''
 
-const localDateKey = (date = new Date()) => {
-  const offset = date.getTimezoneOffset()
-  const localDate = new Date(date.getTime() - offset * 60000)
-  return localDate.toISOString().slice(0, 10)
+const businessDateKey = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
 }
+const localDateKey = (date = new Date()) => businessDateKey(date)
+const getTodayClosure = () => dailyClosures.find((closure) => closure.businessDate === businessDateKey())
+const isSalesDayClosed = () => Boolean(getTodayClosure())
+const countSaleTransactions = (dailySales: Sale[]) => new Set(dailySales.map((sale) => sale.transactionId || `sale-${sale.id}`)).size
 const formatLongDate = (date = new Date()) => new Intl.DateTimeFormat('es-ES', {
   weekday: 'long',
   day: '2-digit',
@@ -63,7 +71,7 @@ function persist() {
   lastPersistedSalesCount = sales.length
   pendingMovementNote = ''
   pendingMovementKind = null
-  localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole)
+  localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-daily-closures-ao', JSON.stringify(dailyClosures)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole)
 }
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
 const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Movimientos', 'Reportes'] : ['Inicio', 'Ventas']
@@ -116,7 +124,22 @@ function renderLogin(message = '') { document.querySelector<HTMLDivElement>('#ap
 async function handleLogin(event: SubmitEvent) { event.preventDefault(); if (!supabase) return renderLogin('Supabase no está configurado.'); const form = event.target as HTMLFormElement; const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!; submit.disabled = true; submit.textContent = 'Ingresando...'; const data = new FormData(form); try { const { data: result, error } = await supabase.auth.signInWithPassword({ email: String(data.get('email')).trim(), password: String(data.get('password')) }); if (error) return renderLogin(error.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : error.message); authUser = result.user ? { id: result.user.id, email: result.user.email } : null; await loadRole(); render() } catch { renderLogin('No se pudo conectar con Supabase. Revisa la configuración del proyecto.') } }
 async function loadRole() { if (!supabase || !authUser) return; const { data } = await supabase.from('profiles').select('role').eq('id', authUser.id).maybeSingle(); currentRole = data?.role === 'admin' ? 'admin' : 'seller' }
 async function signOut() { if (supabase) await supabase.auth.signOut(); authUser = null; currentRole = 'seller'; activeView = 'Inicio'; renderLogin() }
-async function loadCloudData() { if (!supabase) return; const { data: cloudProducts } = await supabase.from('products').select('id,name,sku,price,stock,min_stock,category:categories(name)').order('id'); const { data: cloudCategories } = await supabase.from('categories').select('name').order('name'); const { data: cloudSales } = await supabase.from('sales').select('id,total,created_at,sale_items(quantity,product_id,products(name))').order('created_at', { ascending: false }); if (cloudProducts?.length) products = cloudProducts.map((item: any) => ({ id: item.id, name: item.name, sku: item.sku, category: item.category?.name || 'Otros', price: Number(item.price), stock: item.stock, min: item.min_stock })); if (cloudCategories?.length) categories = cloudCategories.map((item) => item.name); if (cloudSales) sales = cloudSales.flatMap((sale: any) => (sale.sale_items || []).map((item: any) => ({ id: sale.id + item.product_id, productId: item.product_id, productName: item.products?.name || 'Producto', quantity: item.quantity, total: Number(sale.total), date: localDateKey(new Date(sale.created_at)) }))); lastCloudSalesCount = sales.length; lastSalesCount = sales.length; persist() }
+async function loadCloudData() {
+  if (!supabase) return
+  const { data: cloudProducts } = await supabase.from('products').select('id,name,sku,price,stock,min_stock,category:categories(name)').order('id')
+  const { data: cloudCategories } = await supabase.from('categories').select('name').order('name')
+  const { data: cloudSales } = await supabase.from('sales').select('id,total,created_at,sale_items(quantity,product_id,unit_price,products(name))').order('created_at', { ascending: false })
+  if (cloudProducts?.length) products = cloudProducts.map((item: any) => ({ id: item.id, name: item.name, sku: item.sku, category: item.category?.name || 'Otros', price: Number(item.price), stock: item.stock, min: item.min_stock }))
+  if (cloudCategories?.length) categories = cloudCategories.map((item) => item.name)
+  if (cloudSales) sales = cloudSales.flatMap((sale: any) => (sale.sale_items || []).map((item: any) => ({
+    id: sale.id + item.product_id, transactionId: String(sale.id), productId: item.product_id,
+    productName: item.products?.name || 'Producto', quantity: item.quantity,
+    total: Number(item.unit_price) * item.quantity, date: localDateKey(new Date(sale.created_at)),
+  })))
+  lastCloudSalesCount = sales.length
+  lastSalesCount = sales.length
+  persist()
+}
 async function loadCloudMovements() {
   if (!supabase) return
   const { data, error } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(500)
@@ -130,8 +153,65 @@ async function loadCloudMovements() {
   cloudMovementHistory = true
   persist()
 }
+async function loadCloudDailyClosure() {
+  if (!supabase) return
+  const businessDate = businessDateKey()
+  const { data, error } = await supabase.from('daily_closures').select('*').eq('business_date', businessDate).maybeSingle()
+  if (error) { cloudDailyClosuresAvailable = false; return }
+  cloudDailyClosuresAvailable = true
+  if (data) {
+    dailyClosures = dailyClosures.filter((closure) => closure.businessDate !== businessDate)
+    dailyClosures.unshift({
+      businessDate: data.business_date, total: Number(data.total), transactions: data.transaction_count,
+      units: data.units_sold, closedAt: data.closed_at, closedBy: data.closed_by_label || 'Administrador',
+    })
+  }
+  localStorage.setItem('sv-daily-closures-ao', JSON.stringify(dailyClosures))
+}
 async function syncCatalog() { if (!supabase || currentRole !== 'admin') return null; const categoryResult = await supabase.from('categories').upsert(categories.map((name) => ({ name })), { onConflict: 'name' }); if (categoryResult.error) throw new Error(`No se pudieron guardar las categorías: ${categoryResult.error.message}`); const { data: cloudCategories, error: categoryReadError } = await supabase.from('categories').select('id,name'); if (categoryReadError) throw new Error(`No se pudieron leer las categorías: ${categoryReadError.message}`); const categoryIds = new Map((cloudCategories || []).map((item) => [item.name, item.id])); const productResult = await supabase.from('products').upsert(products.map((product) => ({ id: product.id, name: product.name, sku: product.sku, category_id: categoryIds.get(product.category), price: product.price, stock: product.stock, min_stock: product.min })), { onConflict: 'sku' }); if (productResult.error) throw new Error(`No se pudieron guardar los productos: ${productResult.error.message}`); return true }
-async function syncNewSales() { if (!supabase || !authUser) return; const pending = sales.slice(lastCloudSalesCount); for (const sale of pending) { const { error } = await supabase.rpc('create_sale', { items: [{ product_id: sale.productId, quantity: sale.quantity }] }); if (error) throw new Error(`No se pudo guardar la venta: ${error.message}`) } lastCloudSalesCount = sales.length }
+async function syncNewSales() {
+  if (!supabase || !authUser) return
+  while (lastCloudSalesCount < sales.length) {
+    const firstIndex = lastCloudSalesCount
+    const firstSale = sales[firstIndex]
+    const transactionId = firstSale.transactionId
+    let nextIndex = firstIndex + 1
+    if (transactionId) {
+      while (nextIndex < sales.length && sales[nextIndex].transactionId === transactionId) nextIndex += 1
+    }
+    const transactionSales = sales.slice(firstIndex, nextIndex)
+    const { error } = await supabase.rpc('create_sale', { items: transactionSales.map((sale) => ({ product_id: sale.productId, quantity: sale.quantity })) })
+    if (error) {
+      if (error.message.toLowerCase().includes('daily sales are closed')) {
+        const rejectedSales = sales.slice(firstIndex)
+        const movementCounts = new Map<number, number>()
+        rejectedSales.forEach((rejected) => {
+          const product = products.find((item) => item.id === rejected.productId)
+          if (product) product.stock += rejected.quantity
+          movementCounts.set(rejected.productId, (movementCounts.get(rejected.productId) || 0) + 1)
+        })
+        stockMovements = stockMovements.filter((movement) => {
+          const remaining = movementCounts.get(movement.productId) || 0
+          if (movement.kind !== 'sale' || remaining === 0) return true
+          movementCounts.set(movement.productId, remaining - 1)
+          return false
+        })
+        sales = sales.slice(0, firstIndex)
+        lastSalesCount = sales.length
+        lastCloudSalesCount = sales.length
+        suppressMovementCapture = true
+        persist()
+        suppressMovementCapture = false
+        showToast('La caja se cerró desde otro equipo; la venta pendiente fue cancelada.', 'error')
+        render()
+      } else {
+        showToast(`No se pudo sincronizar la venta: ${error.message}`, 'error')
+      }
+      return
+    }
+    lastCloudSalesCount = nextIndex
+  }
+}
 async function syncCloudWithFeedback() { try { await syncCatalog() } catch (error) { alert(error instanceof Error ? error.message : 'No se pudieron sincronizar los datos con Supabase.') } }
 async function initializeAuth() {
   if (!supabase) return renderLogin('Configura Supabase para iniciar sesión.')
@@ -142,6 +222,8 @@ async function initializeAuth() {
   suppressMovementCapture = true
   try { await loadCloudData() } finally { suppressMovementCapture = false }
   await loadCloudMovements()
+  await loadCloudDailyClosure()
+  lastObservedBusinessDate = businessDateKey()
   render()
 }
 
@@ -172,7 +254,20 @@ function applyRoleAccess() {
 function dashboard(revenue: number, count: number, lowStock: Product[]) { return `<section class="welcome-row"><div><p class="subtle">Resumen de tu negocio</p></div><button class="primary" data-action="new-sale">+ Nueva venta</button></section><div class="metric-grid"><article class="metric-card mint"><span>Ventas de hoy</span><strong>${money(revenue)}</strong><small class="positive">↑ ${count ? '12.4%' : '0%'} <em>vs. ayer</em></small><div class="sparkline">▁▂▁▃▂▄▃▅▆</div></article><article class="metric-card yellow"><span>Productos activos</span><strong>${products.length}</strong><small>de 100 disponibles</small><div class="progress"><i style="width:${products.length}%"></i></div></article><article class="metric-card coral"><span>Stock por reponer</span><strong>${lowStock.length}</strong><small class="warning">Requieren atención</small><div class="stock-dots">● ● ● ● ● ●</div></article></div><div class="dashboard-grid"><section class="panel sales-panel"><div class="panel-head"><div><h2>Actividad reciente</h2><p>Últimas ventas registradas</p></div><button class="text-button" data-view="Ventas">Ver todas →</button></div>${sales.length ? `<div class="sale-list">${sales.slice(-5).reverse().map(saleRow).join('')}</div>` : emptyState('Aún no hay ventas', 'Registra tu primera venta para verla aquí.')}</section><section class="panel"><div class="panel-head"><div><h2>Atención rápida</h2><p>Productos con stock bajo</p></div><button class="text-button" data-view="Inventario">Ver inventario →</button></div>${lowStock.length ? `<div class="low-list">${lowStock.slice(0, 4).map((product) => `<div class="low-item"><div class="product-avatar">${product.name.charAt(0)}</div><div><strong>${product.name}</strong><small>${product.sku}</small></div><b class="stock-badge">${product.stock} uds.</b></div>`).join('')}</div>` : emptyState('Todo en orden', 'No tienes productos por debajo del mínimo.')}</section></div>` }
 function saleRow(sale: Sale) { return `<div class="sale-row"><div class="sale-symbol">↗</div><div><strong>${sale.productName}</strong><small>${sale.quantity} unidad${sale.quantity > 1 ? 'es' : ''} · ${sale.date}</small></div><b>${money(sale.total)}</b></div>` }
 function emptyState(title: string, text: string) { return `<div class="empty"><span>◌</span><strong>${title}</strong><p>${text}</p></div>` }
-function salesView() { return `<section class="view-toolbar"><div><p class="subtle">Registra salidas y mantén tus números al día.</p></div><button class="primary" data-action="new-sale">+ Nueva venta</button></section><section class="panel table-panel"><div class="panel-head"><div><h2>Historial de ventas</h2><p>${sales.length} operaciones registradas</p></div><button class="outline" data-action="export">↓ Exportar</button></div>${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Fecha</th><th>Cantidad</th><th>Total</th></tr></thead><tbody>${sales.slice().reverse().map((sale) => `<tr><td><strong>${sale.productName}</strong></td><td>${sale.date}</td><td>${sale.quantity}</td><td><b>${money(sale.total)}</b></td></tr>`).join('')}</tbody></table></div>` : emptyState('Sin ventas todavía', 'Usa “Nueva venta” para comenzar.')}</section>` }
+function salesView() {
+  const today = businessDateKey()
+  const todaySales = sales.filter((sale) => sale.date === today)
+  const todayTotal = todaySales.reduce((sum, sale) => sum + sale.total, 0)
+  const todayUnits = todaySales.reduce((sum, sale) => sum + sale.quantity, 0)
+  const todayTransactions = countSaleTransactions(todaySales)
+  const closure = getTodayClosure()
+  const closedPanel = closure
+    ? `<section class="daily-closure-banner closed"><div><span class="closure-status">CAJA CERRADA</span><h2>Ventas del día finalizadas</h2><p>Cierre realizado por ${closure.closedBy} · ${new Intl.DateTimeFormat('es-BO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(closure.closedAt))}</p></div><div class="closure-total"><strong>${money(closure.total)}</strong><small>${closure.transactions} ventas · ${closure.units} unidades</small></div></section>`
+    : supabase && !cloudDailyClosuresAvailable
+      ? '<section class="daily-closure-banner local-only"><div><span class="closure-status">CIERRE LOCAL</span><h2>El cierre compartido requiere configurar Supabase</h2><p>Aplica migration-daily-closing.sql para bloquear ventas en todos los equipos.</p></div></section>'
+      : ''
+  return `<section class="view-toolbar"><div><p class="subtle">Registro y control de ventas del día ${today}.</p></div>${!closure && currentRole === 'admin' ? '<button class="outline" data-action="close-sales-day">▣ Cerrar caja del día</button>' : ''}</section>${closedPanel}<section class="daily-sales-summary"><article><span>Venta acumulada hoy</span><strong>${money(closure?.total ?? todayTotal)}</strong></article><article><span>Operaciones hoy</span><strong>${closure?.transactions ?? todayTransactions}</strong></article><article><span>Unidades vendidas</span><strong>${closure?.units ?? todayUnits}</strong></article><div class="daily-sales-action">${closure ? '<span class="sales-locked">Registro bloqueado hasta mañana</span>' : `<button class="primary" data-action="new-sale">+ Nueva venta</button>`}</div></section><section class="panel table-panel"><div class="panel-head"><div><h2>Historial de ventas</h2><p>${sales.length} operaciones registradas</p></div><button class="outline" data-action="export">↓ Exportar</button></div>${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Fecha</th><th>Cantidad</th><th>Total</th></tr></thead><tbody>${sales.slice().reverse().map((sale) => `<tr><td><strong>${sale.productName}</strong></td><td>${sale.date}</td><td>${sale.quantity}</td><td><b>${money(sale.total)}</b></td></tr>`).join('')}</tbody></table></div>` : emptyState('Sin ventas todavía', 'Usa “Nueva venta” para comenzar.')}</section>`
+}
 function getProductGroups(search = '', category = 'Todas') {
   const term = search.toLowerCase().trim()
   const matchingProducts = products.filter((product) =>
@@ -280,6 +375,56 @@ function updateMovementFilter(target: HTMLInputElement | HTMLSelectElement) {
   if (target.dataset.movementFilter === 'end') movementEndDate = value
   refreshMovementRows()
 }
+function showDailyCloseConfirmation() {
+  const businessDate = businessDateKey()
+  const daySales = sales.filter((sale) => sale.date === businessDate)
+  const total = daySales.reduce((sum, sale) => sum + sale.total, 0)
+  const units = daySales.reduce((sum, sale) => sum + sale.quantity, 0)
+  document.querySelector<HTMLElement>('#modal-root')!.innerHTML = `<div class="modal-backdrop"><section class="modal close-day-modal"><button class="close" data-action="close" aria-label="Cerrar">×</button><p class="eyebrow">CIERRE DE CAJA</p><h2>Finalizar ventas de hoy</h2><p class="subtle">Al confirmar, no se podrán registrar nuevas ventas hasta mañana.</p><div class="close-day-totals"><div><span>Fecha</span><strong>${businessDate}</strong></div><div><span>Ventas registradas</span><strong>${daySales.length}</strong></div><div><span>Unidades</span><strong>${units}</strong></div><div><span>Total del día</span><strong>${money(total)}</strong></div></div><label class="close-day-confirm"><input type="checkbox" id="confirm-day-close" /><span>Confirmo el cierre de caja y que revisé el total.</span></label><div class="form-actions"><button class="outline" type="button" data-action="close">Volver</button><button class="primary" type="button" data-action="confirm-day-close" disabled>Cerrar caja definitivamente</button></div></section></div>`
+  document.querySelectorAll<HTMLElement>('[data-action="close"]').forEach((button) => button.addEventListener('click', closeModal))
+  document.querySelector<HTMLElement>('.modal-backdrop')!.addEventListener('click', (event) => { if (event.target === event.currentTarget) closeModal() })
+  document.querySelector<HTMLInputElement>('#confirm-day-close')!.addEventListener('change', (event) => {
+    document.querySelector<HTMLButtonElement>('[data-action="confirm-day-close"]')!.disabled = !(event.target as HTMLInputElement).checked
+  })
+  document.querySelector<HTMLButtonElement>('[data-action="confirm-day-close"]')!.addEventListener('click', closeSalesDay)
+}
+async function closeSalesDay() {
+  if (currentRole !== 'admin' || isSalesDayClosed()) return
+  const businessDate = businessDateKey()
+  const daySales = sales.filter((sale) => sale.date === businessDate)
+  const localSummary = {
+    businessDate, total: daySales.reduce((sum, sale) => sum + sale.total, 0),
+    transactions: countSaleTransactions(daySales), units: daySales.reduce((sum, sale) => sum + sale.quantity, 0),
+    closedAt: new Date().toISOString(), closedBy: authUser?.email || roleName(),
+  }
+  const button = document.querySelector<HTMLButtonElement>('[data-action="confirm-day-close"]')
+  if (button) { button.disabled = true; button.textContent = 'Cerrando caja...' }
+  let localOnly = !supabase
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.rpc('close_daily_sales')
+      if (error && ['PGRST202', '42883'].includes(error.code || '')) localOnly = true
+      else if (error) throw new Error(error.message)
+      else if (data) {
+        const result = data as Record<string, unknown>
+        localSummary.total = Number(result.total ?? localSummary.total)
+        localSummary.transactions = Number(result.transaction_count ?? localSummary.transactions)
+        localSummary.units = Number(result.units_sold ?? localSummary.units)
+        localSummary.closedAt = String(result.closed_at ?? localSummary.closedAt)
+        localSummary.closedBy = String(result.closed_by_label ?? localSummary.closedBy)
+        cloudDailyClosuresAvailable = true
+      }
+    }
+    dailyClosures = [localSummary, ...dailyClosures.filter((closure) => closure.businessDate !== businessDate)]
+    localStorage.setItem('sv-daily-closures-ao', JSON.stringify(dailyClosures))
+    closeModal()
+    render()
+    showToast(localOnly ? 'Caja cerrada en este dispositivo. Aplica la migración para bloquear otros equipos.' : 'Caja cerrada. Las ventas se reactivan mañana.', localOnly ? 'error' : 'success')
+  } catch (error) {
+    if (button) { button.disabled = false; button.textContent = 'Cerrar caja definitivamente' }
+    showToast(error instanceof Error ? `No se pudo cerrar la caja: ${error.message}` : 'No se pudo cerrar la caja.', 'error')
+  }
+}
 function reportsView() {
   const { start, end } = getReportRange()
   const filteredSales = filterSalesByRange(start, end)
@@ -329,7 +474,68 @@ let lastSalesCount = sales.length
 let lastCloudSalesCount = sales.length
 function showPayment(total: number) { document.querySelector('#modal-root')!.innerHTML = `<div class="modal-backdrop"><section class="payment-modal"><div class="payment-copy"><p class="eyebrow">VENTA REGISTRADA</p><h2>Listo para cobrar</h2><p class="subtle">Muestra este código QR al cliente para completar el pago.</p><div class="payment-total"><span>Total a pagar</span><strong>${money(total)}</strong></div><p class="payment-note">Confirma el pago antes de finalizar.</p><button class="primary full" type="button" data-action="close">Finalizar</button></div><div class="qr-panel"><div class="qr-frame"><img src="/codigo-qr.jpeg" alt="Código QR de pago BCP" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><div class="qr-missing" hidden>No se encontró el QR de pago.</div></div><strong>Pago por QR BCP</strong><small>Escanea para pagar</small></div></section></div>`; document.querySelector<HTMLElement>('[data-action="close"]')!.addEventListener('click', closeModal) }
 function setupSaleDetails() { const form = document.querySelector<HTMLFormElement>('#modal-form[data-kind="sale"]'); if (!form || form.dataset.detailsReady) return; form.dataset.detailsReady = 'true'; const productSelect = form.querySelector<HTMLSelectElement>('#sale-product')!; const productLabel = productSelect.closest('label')!; const quantityLabel = form.querySelector<HTMLInputElement>('[name="quantity"]')!.closest('label')!; const priceLabel = document.createElement('label'); priceLabel.innerHTML = 'Precio unitario<input id="sale-price" type="text" readonly aria-readonly="true">'; productLabel.after(priceLabel); const updatePrice = () => { const product = products.find((item) => item.id === Number(productSelect.value)); const price = priceLabel.querySelector<HTMLInputElement>('input')!; price.value = product ? money(product.price) : ''; productSelect.querySelectorAll('option').forEach((option) => { const item = products.find((entry) => entry.id === Number(option.value)); if (item) option.textContent = item.name }) }; productSelect.addEventListener('change', updatePrice); updatePrice(); quantityLabel.querySelector('input')!.setAttribute('aria-label', 'Cantidad de unidades'); }
-function setupSaleCart() { const form = document.querySelector<HTMLFormElement>('#modal-form[data-kind="sale"]'); if (!form || form.dataset.cartReady) return; form.dataset.cartReady = 'true'; const productSelect = form.querySelector<HTMLSelectElement>('#sale-product')!; const quantityInput = form.querySelector<HTMLInputElement>('[name="quantity"]')!; const actions = form.querySelector<HTMLElement>('.form-actions')!; const cart: { productId: number; quantity: number }[] = []; const cartBox = document.createElement('div'); cartBox.className = 'sale-cart'; cartBox.innerHTML = '<div class="cart-head"><strong>Productos de la venta</strong><span id="cart-count">0 productos</span></div><div id="cart-items" class="cart-items"></div><div class="cart-total"><span>Total a pagar</span><strong id="cart-total">$0.00</strong></div>'; const addButton = document.createElement('button'); addButton.className = 'outline add-product'; addButton.type = 'button'; addButton.textContent = '+ Agregar producto'; actions.before(addButton, cartBox); const renderCart = () => { const items = document.querySelector<HTMLElement>('#cart-items')!; const total = cart.reduce((sum, item) => { const product = products.find((entry) => entry.id === item.productId)!; return sum + product.price * item.quantity }, 0); items.innerHTML = cart.length ? cart.map((item) => { const product = products.find((entry) => entry.id === item.productId)!; return `<div class="cart-item"><div><strong>${product.name}</strong><small>${money(product.price)} × ${item.quantity}</small></div><b>${money(product.price * item.quantity)}</b><button type="button" data-remove-product="${product.id}" aria-label="Quitar producto">×</button></div>` }).join('') : '<p class="cart-empty">Agrega uno o más productos a la venta.</p>'; document.querySelector('#cart-count')!.textContent = `${cart.length} producto${cart.length === 1 ? '' : 's'}`; document.querySelector('#cart-total')!.textContent = money(total); document.querySelectorAll<HTMLElement>('[data-remove-product]').forEach((button) => button.addEventListener('click', () => { const index = cart.findIndex((item) => item.productId === Number(button.dataset.removeProduct)); if (index >= 0) cart.splice(index, 1); renderCart() })) }; addButton.addEventListener('click', () => { const product = products.find((entry) => entry.id === Number(productSelect.value)); const quantity = Number(quantityInput.value); if (!product || quantity < 1) return; const existing = cart.find((item) => item.productId === product.id); const nextQuantity = (existing?.quantity || 0) + quantity; if (nextQuantity > product.stock) return alert(`Solo hay ${product.stock} unidades disponibles.`); if (existing) existing.quantity = nextQuantity; else cart.push({ productId: product.id, quantity }); renderCart(); quantityInput.value = '1' }); form.addEventListener('submit', (event) => { if (!cart.length) return; event.preventDefault(); event.stopImmediatePropagation(); cart.forEach((item) => { const product = products.find((entry) => entry.id === item.productId)!; product.stock -= item.quantity; sales.push({ id: Date.now() + item.productId, productId: product.id, productName: product.name, quantity: item.quantity, total: product.price * item.quantity, date: new Date().toISOString().slice(0, 10) }) }); persist(); closeModal(); render() }, true); renderCart() }
+function setupSaleCart() {
+  const form = document.querySelector<HTMLFormElement>('#modal-form[data-kind="sale"]')
+  if (!form || form.dataset.cartReady) return
+  form.dataset.cartReady = 'true'
+  const productSelect = form.querySelector<HTMLSelectElement>('#sale-product')!
+  const quantityInput = form.querySelector<HTMLInputElement>('[name="quantity"]')!
+  const actions = form.querySelector<HTMLElement>('.form-actions')!
+  const cart: { productId: number; quantity: number }[] = []
+  const cartBox = document.createElement('div')
+  cartBox.className = 'sale-cart'
+  cartBox.innerHTML = '<div class="cart-head"><strong>Productos de la venta</strong><span id="cart-count">0 productos</span></div><div id="cart-items" class="cart-items"></div><div class="cart-total"><span>Total a pagar</span><strong id="cart-total">$0.00</strong></div>'
+  const addButton = document.createElement('button')
+  addButton.className = 'outline add-product'
+  addButton.type = 'button'
+  addButton.textContent = '+ Agregar producto'
+  actions.before(addButton, cartBox)
+  const renderCart = () => {
+    const items = document.querySelector<HTMLElement>('#cart-items')!
+    const total = cart.reduce((sum, item) => {
+      const product = products.find((entry) => entry.id === item.productId)!
+      return sum + product.price * item.quantity
+    }, 0)
+    items.innerHTML = cart.length ? cart.map((item) => {
+      const product = products.find((entry) => entry.id === item.productId)!
+      return `<div class="cart-item"><div><strong>${product.name}</strong><small>${money(product.price)} × ${item.quantity}</small></div><b>${money(product.price * item.quantity)}</b><button type="button" data-remove-product="${product.id}" aria-label="Quitar producto">×</button></div>`
+    }).join('') : '<p class="cart-empty">Agrega uno o más productos a la venta.</p>'
+    document.querySelector('#cart-count')!.textContent = `${cart.length} producto${cart.length === 1 ? '' : 's'}`
+    document.querySelector('#cart-total')!.textContent = money(total)
+    document.querySelectorAll<HTMLElement>('[data-remove-product]').forEach((button) => button.addEventListener('click', () => {
+      const index = cart.findIndex((item) => item.productId === Number(button.dataset.removeProduct))
+      if (index >= 0) cart.splice(index, 1)
+      renderCart()
+    }))
+  }
+  addButton.addEventListener('click', () => {
+    const product = products.find((entry) => entry.id === Number(productSelect.value))
+    const quantity = Number(quantityInput.value)
+    if (!product || quantity < 1) return
+    const existing = cart.find((item) => item.productId === product.id)
+    const nextQuantity = (existing?.quantity || 0) + quantity
+    if (nextQuantity > product.stock) return alert(`Solo hay ${product.stock} unidades disponibles.`)
+    if (existing) existing.quantity = nextQuantity
+    else cart.push({ productId: product.id, quantity })
+    renderCart()
+    quantityInput.value = '1'
+  })
+  form.addEventListener('submit', (event) => {
+    if (!cart.length) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const transactionId = crypto.randomUUID()
+    cart.forEach((item) => {
+      const product = products.find((entry) => entry.id === item.productId)!
+      product.stock -= item.quantity
+      sales.push({ id: Date.now() + item.productId, transactionId, productId: product.id, productName: product.name, quantity: item.quantity, total: product.price * item.quantity, date: businessDateKey() })
+    })
+    persist()
+    closeModal()
+    render()
+  }, true)
+  renderCart()
+}
 const modalObserver = new MutationObserver(() => { setupSaleDetails(); setupSaleCart(); if (sales.length > lastSalesCount) { const total = sales.slice(lastSalesCount).reduce((sum, sale) => sum + sale.total, 0); lastSalesCount = sales.length; showPayment(total); syncNewSales() } });
 document.addEventListener('submit', (event) => { const form = event.target as HTMLFormElement; if (form.id !== 'admin-auth-form' && form.dataset.kind !== 'sale' && form.dataset.kind !== 'stock') window.setTimeout(() => syncCloudWithFeedback(), 0) }, true);
 document.addEventListener('input', (event) => {
@@ -346,6 +552,26 @@ document.addEventListener('change', (event) => {
 });
 document.addEventListener('click', (event) => {
   const target = event.target
+  if (!(target instanceof Element)) return
+  if (isSalesDayClosed() && target.closest('[data-action="new-sale"]')) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    showToast('La caja está cerrada. Podrás vender mañana.', 'error')
+    return
+  }
+  if (target.closest('[data-action="close-sales-day"]')) showDailyCloseConfirmation()
+}, true);
+document.addEventListener('submit', (event) => {
+  const form = event.target
+  if (form instanceof HTMLFormElement && form.dataset.kind === 'sale' && isSalesDayClosed()) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    closeModal()
+    showToast('La caja está cerrada. Podrás vender mañana.', 'error')
+  }
+}, true);
+document.addEventListener('click', (event) => {
+  const target = event.target
   if (target instanceof Element && target.closest('[data-action="new-stock-movement"]')) showStockMovementModal()
 });
 document.addEventListener('input', (event) => {
@@ -357,4 +583,13 @@ document.addEventListener('change', (event) => {
   if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement) && target.dataset.movementFilter) updateMovementFilter(target)
 });
 initializeAuth();
+window.setInterval(async () => {
+  if (!authUser) return
+  const businessDate = businessDateKey()
+  const dateChanged = businessDate !== lastObservedBusinessDate
+  const wasClosed = isSalesDayClosed()
+  if (dateChanged) lastObservedBusinessDate = businessDate
+  if (supabase) await loadCloudDailyClosure()
+  if (dateChanged || wasClosed !== isSalesDayClosed()) render()
+}, 60000)
 modalObserver.observe(document.body, { childList: true, subtree: true });

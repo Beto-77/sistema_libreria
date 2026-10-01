@@ -80,3 +80,38 @@ main { max-width:1240px; width:100%; margin:0 auto; padding:30px 18px 40px; } he
 	.movement-filters>label input { min-width:0; width:100%; }
 	.movement-notice { margin-inline:14px; }
 }
+	.daily-sales-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) auto; align-items:center; gap:10px; margin:-5px 0 20px; padding:16px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(110deg,#fff,#f5f9f8); }
+	.daily-sales-summary article { display:grid; gap:6px; padding-inline:10px; border-right:1px solid var(--line); }
+	.daily-sales-summary article span,.close-day-totals span { color:var(--muted); font-size:11px; }
+	.daily-sales-summary article strong { color:var(--ink); font:600 19px 'Space Grotesk',sans-serif; }
+	.daily-sales-action { min-width:145px; text-align:right; }
+	.daily-sales-action .primary { white-space:nowrap; }
+	.sales-locked { color:#a4543e; font-size:11px; font-weight:700; }
+	.daily-closure-banner { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:0 0 16px; padding:19px 22px; border:1px solid #e7c4b5; border-radius:10px; background:#fff7f2; }
+	.daily-closure-banner h2 { margin:5px 0; font-size:17px; }
+	.daily-closure-banner p { margin:0; color:var(--muted); font-size:11px; }
+	.closure-status { color:#a4543e; font-size:10px; font-weight:800; letter-spacing:1px; }
+	.closure-total { text-align:right; }
+	.closure-total strong,.closure-total small { display:block; }
+	.closure-total strong { color:#a4543e; font:700 23px 'Space Grotesk',sans-serif; }
+	.closure-total small { margin-top:4px; color:var(--muted); font-size:10px; }
+	.daily-closure-banner.local-only { border-color:#ead7a8; background:#fff9e9; }
+	.daily-closure-banner.local-only .closure-status { color:#86691e; }
+	.close-day-modal { width:min(480px,100%); }
+	.close-day-totals { display:grid; grid-template-columns:1fr 1fr; gap:1px; margin:20px 0; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:var(--line); }
+	.close-day-totals>div { display:grid; gap:5px; padding:12px; background:#fff; }
+	.close-day-totals strong { color:var(--ink); font-size:13px; }
+	.close-day-confirm { display:flex!important; grid-template-columns:auto 1fr!important; align-items:center; gap:9px!important; margin:0 0 18px; color:var(--muted)!important; font-size:11px!important; }
+	.close-day-confirm input { width:16px; height:16px; margin:0; accent-color:var(--green); }
+	.close-day-modal .form-actions { flex-wrap:wrap; }
+	.close-day-modal button:disabled { cursor:not-allowed; opacity:.52; }
+	@media (max-width:600px) {
+		.daily-sales-summary { grid-template-columns:1fr 1fr; gap:12px 4px; padding:12px; }
+		.daily-sales-summary article { padding-inline:8px; }
+		.daily-sales-summary article:nth-child(2) { border-right:0; }
+		.daily-sales-action { grid-column:1 / -1; text-align:left; padding-inline:8px; }
+		.daily-closure-banner { align-items:flex-start; flex-direction:column; padding:16px; }
+		.closure-total { text-align:left; }
+		.close-day-modal .form-actions { display:grid; grid-template-columns:1fr; }
+		.close-day-modal .form-actions button { width:100%; }
+	}
