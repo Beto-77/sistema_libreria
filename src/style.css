@@ -54,3 +54,26 @@ main { max-width:1240px; width:100%; margin:0 auto; padding:30px 18px 40px; } he
 	.inventory-product strong { font-size:11px; }
 	.inventory-product small { font-size:10px; }
 }
+.movement-panel .panel-head { align-items:flex-start; gap:16px; flex-wrap:wrap; }
+.movement-filters { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+.movement-filters>input,.movement-filters>select { min-width:145px; }
+.movement-filters>label { display:grid; gap:5px; color:var(--muted); font-size:10px; font-weight:600; }
+.movement-filters>label input { min-width:140px; }
+.movement-table { min-width:920px; }
+.movement-table td { vertical-align:middle; }
+.movement-subline { display:block; margin-top:4px; color:var(--muted); font-size:10px; }
+.movement-type { display:inline-block; padding:5px 8px; border-radius:5px; background:#eef2f4; color:#526879; font-size:10px; font-weight:700; }
+.movement-type.entry,.movement-type.return { background:#e7f3e9; color:#3b8054; }
+.movement-type.sale { background:#fff0e7; color:#b66a49; }
+.movement-type.adjustment { background:#fff5d9; color:#8b6c21; }
+.movement-delta { font-weight:700; white-space:nowrap; }
+.movement-delta.positive { color:#3b8054; }
+.movement-delta.negative { color:#b66a49; }
+.movement-notice { margin:-6px 24px 16px; padding:10px 12px; border-left:3px solid #d3a942; background:#fff8e5; color:#74612a; font-size:11px; line-height:1.5; }
+@media (max-width:600px) {
+	.movement-filters { display:grid; grid-template-columns:1fr 1fr; width:100%; }
+	.movement-filters>input,.movement-filters>select { min-width:0; width:100%; }
+	.movement-filters>input:first-child { grid-column:1 / -1; }
+	.movement-filters>label input { min-width:0; width:100%; }
+	.movement-notice { margin-inline:14px; }
+}
