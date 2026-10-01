@@ -3,6 +3,8 @@ import { supabase } from './lib/supabase'
 
 type Product = { id: number; name: string; sku: string; category: string; price: number; stock: number; min: number }
 type Sale = { id: number; productId: number; productName: string; quantity: number; total: number; date: string }
+type MovementKind = 'entry' | 'sale' | 'adjustment' | 'return'
+type StockMovement = { id: string; productId: number; productName: string; sku: string; category: string; kind: MovementKind; delta: number; before: number; after: number; note: string; date: string; actor: string }
 type Role = 'admin' | 'seller'
 
 const starterProducts: Product[] = [
@@ -14,6 +16,7 @@ const starterProducts: Product[] = [
 ]
 let products: Product[] = JSON.parse(localStorage.getItem('sv-products-ao') || JSON.stringify(starterProducts))
 let sales: Sale[] = JSON.parse(localStorage.getItem('sv-sales-ao') || '[]')
+let stockMovements: StockMovement[] = JSON.parse(localStorage.getItem('sv-stock-movements-ao') || '[]')
 let categories: string[] = JSON.parse(localStorage.getItem('sv-categories-ao') || JSON.stringify(['Papelería', 'Escritura', 'Libros', 'Manualidades', 'Otros']))
 let currentRole: Role = 'seller'
 let activeView = 'Inicio'
@@ -34,9 +37,9 @@ const formatLongDate = (date = new Date()) => new Intl.DateTimeFormat('es-ES', {
 }).format(date).replace(/^\w/, (char) => char.toUpperCase())
 
 const money = (value: number) => `Bs ${value.toFixed(2)}`
-const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole) }
+const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole) }
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
-const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'] : ['Inicio', 'Ventas']
+const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Movimientos', 'Reportes'] : ['Inicio', 'Ventas']
 const icon = (value: string) => `<span class="nav-icon">${value}</span>`
 const getReportRange = () => {
   const orderedDates = sales.map((sale) => sale.date).sort()
