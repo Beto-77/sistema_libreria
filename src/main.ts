@@ -213,6 +213,57 @@ function movementHistoryView() {
   const migrationNotice = supabase && !cloudMovementHistory ? '<p class="movement-notice">Mostrando movimientos guardados en este dispositivo. Para sincronizar el historial entre usuarios, aplica la migración SQL del proyecto.</p>' : ''
   return `<section class="view-toolbar"><div><p class="subtle">Trazabilidad de entradas, ventas, ajustes y devoluciones.</p></div><button class="primary" data-action="new-stock-movement">+ Registrar movimiento</button></section><section class="panel table-panel movement-panel"><div class="panel-head"><div><h2>Historial de inventario</h2><p class="movement-count">${filteredStockMovements().length} movimientos registrados</p></div><div class="movement-filters"><input class="search" data-movement-filter="search" value="${movementSearch}" placeholder="⌕ Producto, SKU o nota..." /><select class="search" data-movement-filter="type"><option value="Todos">Todos los tipos</option>${Object.entries(movementLabels).map(([value, label]) => `<option value="${value}" ${movementTypeFilter === value ? 'selected' : ''}>${label}</option>`).join('')}</select><label>Desde<input class="search" data-movement-filter="start" type="date" value="${movementStartDate}" /></label><label>Hasta<input class="search" data-movement-filter="end" type="date" value="${movementEndDate}" /></label></div></div>${migrationNotice}<div class="table-wrap"><table class="movement-table"><thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cambio</th><th>Stock</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody id="movement-rows">${renderMovementRows()}</tbody></table></div></section>`
 }
+function showStockMovementModal() {
+  const options = products.map((product) => `<option value="${product.id}">${product.name} · ${product.sku} · ${product.stock} uds.</option>`).join('')
+  document.querySelector<HTMLElement>('#modal-root')!.innerHTML = `<div class="modal-backdrop"><div class="modal"><button class="close" data-action="close" aria-label="Cerrar">×</button><p class="eyebrow">INVENTARIO</p><h2>Registrar movimiento</h2><p class="subtle">El ajuste acepta cantidades positivas o negativas.</p><form id="stock-movement-form"><label>Producto<select name="productId" required>${options}</select></label><label>Tipo de movimiento<select name="kind"><option value="entry">Entrada</option><option value="adjustment">Ajuste de inventario</option><option value="return">Devolución</option></select></label><label>Cantidad<input name="delta" type="number" step="1" value="1" required></label><label>Motivo<input name="note" maxlength="200" placeholder="Ej. Reposición de proveedor" /></label><div class="form-actions"><button class="outline" type="button" data-action="close">Cancelar</button><button class="primary" type="submit">Guardar movimiento</button></div></form></div></div>`
+  document.querySelector<HTMLFormElement>('#stock-movement-form')!.addEventListener('submit', handleStockMovementSubmit)
+  document.querySelectorAll<HTMLElement>('[data-action="close"]').forEach((button) => button.addEventListener('click', closeModal))
+  document.querySelector<HTMLElement>('.modal-backdrop')!.addEventListener('click', (event) => { if (event.target === event.currentTarget) closeModal() })
+}
+async function handleStockMovementSubmit(event: SubmitEvent) {
+  event.preventDefault()
+  const form = event.currentTarget as HTMLFormElement
+  const values = new FormData(form)
+  const product = products.find((item) => item.id === Number(values.get('productId')))
+  const kind = String(values.get('kind')) as MovementKind
+  const delta = Number(values.get('delta'))
+  const note = String(values.get('note') || '').trim()
+  if (!product || !Number.isInteger(delta) || delta === 0) return showToast('Selecciona un producto y una cantidad entera distinta de cero.', 'error')
+  if (kind !== 'adjustment' && delta < 1) return showToast('Las entradas y devoluciones deben ser cantidades positivas.', 'error')
+  if (product.stock + delta < 0) return showToast(`El ajuste dejaría el stock de ${product.name} por debajo de cero.`, 'error')
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
+  submit.disabled = true
+  try {
+    if (supabase) {
+      const { error } = await supabase.rpc('record_stock_change', { p_product_id: product.id, p_delta: delta, p_movement_type: kind, p_note: note })
+      if (error) throw new Error(error.message)
+    }
+    pendingMovementKind = kind
+    pendingMovementNote = note
+    product.stock += delta
+    persist()
+    closeModal()
+    render()
+    showToast('Movimiento de inventario registrado.')
+  } catch (error) {
+    submit.disabled = false
+    showToast(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.', 'error')
+  }
+}
+function refreshMovementRows() {
+  const rows = document.querySelector<HTMLElement>('#movement-rows')
+  if (rows) rows.innerHTML = renderMovementRows()
+  const count = document.querySelector<HTMLElement>('.movement-count')
+  if (count) count.textContent = `${filteredStockMovements().length} movimientos registrados`
+}
+function updateMovementFilter(target: HTMLInputElement | HTMLSelectElement) {
+  const value = target.value
+  if (target.dataset.movementFilter === 'search') movementSearch = value
+  if (target.dataset.movementFilter === 'type') movementTypeFilter = value
+  if (target.dataset.movementFilter === 'start') movementStartDate = value
+  if (target.dataset.movementFilter === 'end') movementEndDate = value
+  refreshMovementRows()
+}
 function reportsView() {
   const { start, end } = getReportRange()
   const filteredSales = filterSalesByRange(start, end)
@@ -276,6 +327,18 @@ document.addEventListener('input', (event) => {
 document.addEventListener('change', (event) => {
   const target = event.target
   if (target instanceof HTMLSelectElement && ['inventory-category', 'inventory-status'].includes(target.id)) refreshInventoryFilters()
+});
+document.addEventListener('click', (event) => {
+  const target = event.target
+  if (target instanceof Element && target.closest('[data-action="new-stock-movement"]')) showStockMovementModal()
+});
+document.addEventListener('input', (event) => {
+  const target = event.target
+  if (target instanceof HTMLInputElement && target.dataset.movementFilter) updateMovementFilter(target)
+});
+document.addEventListener('change', (event) => {
+  const target = event.target
+  if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement) && target.dataset.movementFilter) updateMovementFilter(target)
 });
 initializeAuth();
 modalObserver.observe(document.body, { childList: true, subtree: true });
