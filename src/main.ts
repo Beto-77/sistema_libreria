@@ -21,6 +21,7 @@ let authUser: { id: string; email?: string } | null = null
 let reportStartDate = ''
 let reportEndDate = ''
 
+<<<<<<< HEAD
 const localDateKey = (date = new Date()) => {
   const offset = date.getTimezoneOffset()
   const localDate = new Date(date.getTime() - offset * 60000)
@@ -32,6 +33,8 @@ const formatLongDate = (date = new Date()) => new Intl.DateTimeFormat('es-ES', {
   month: 'long',
   year: 'numeric'
 }).format(date).replace(/^\w/, (char) => char.toUpperCase())
+=======
+>>>>>>> f8bf6e81b88728b78e6f23667fd8a6bf4610b590
 const money = (value: number) => `Bs ${value.toFixed(2)}`
 const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole) }
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
