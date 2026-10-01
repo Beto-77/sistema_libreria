@@ -158,7 +158,26 @@ function render() {
   applyRoleAccess()
 }
 
-function applyRoleAccess() { document.querySelectorAll<HTMLElement>('[data-role]').forEach((item) => item.remove()); document.querySelector<HTMLElement>('.profile')?.addEventListener('click', (event) => { event.stopImmediatePropagation(); const menu = document.querySelector<HTMLElement>('.role-menu'); if (menu) { menu.hidden = !menu.hidden; const button = document.querySelector<HTMLElement>('[data-action="toggle-profile"]'); button?.setAttribute('aria-expanded', String(!menu.hidden)); } else { signOut() } }, true); if (currentRole !== 'seller') return; document.querySelectorAll<HTMLElement>('[data-view]').forEach((item) => { if (['Productos', 'Inventario', 'Reportes'].includes(item.dataset.view || '')) item.remove() }) }
+function applyRoleAccess() {
+  document.querySelector<HTMLElement>('.more')?.remove()
+  document.querySelector<HTMLElement>('.role-menu')?.remove()
+  const previousProfileButton = document.querySelector<HTMLElement>('.profile')
+  if (previousProfileButton) {
+    const signOutButton = previousProfileButton.cloneNode(true) as HTMLButtonElement
+    signOutButton.dataset.action = 'sign-out'
+    signOutButton.removeAttribute('aria-expanded')
+    signOutButton.setAttribute('aria-label', 'Cerrar sesión')
+    signOutButton.title = 'Cerrar sesión'
+    signOutButton.innerHTML = 'AO <span aria-hidden="true">↪</span>'
+    signOutButton.addEventListener('click', () => signOut())
+    previousProfileButton.replaceWith(signOutButton)
+  }
+  if (currentRole === 'seller') {
+    document.querySelectorAll<HTMLElement>('[data-view]').forEach((item) => {
+      if (['Productos', 'Inventario', 'Movimientos', 'Reportes'].includes(item.dataset.view || '')) item.remove()
+    })
+  }
+}
 
 function dashboard(revenue: number, count: number, lowStock: Product[]) { return `<section class="welcome-row"><div><p class="subtle">Resumen de tu negocio</p></div><button class="primary" data-action="new-sale">+ Nueva venta</button></section><div class="metric-grid"><article class="metric-card mint"><span>Ventas de hoy</span><strong>${money(revenue)}</strong><small class="positive">↑ ${count ? '12.4%' : '0%'} <em>vs. ayer</em></small><div class="sparkline">▁▂▁▃▂▄▃▅▆</div></article><article class="metric-card yellow"><span>Productos activos</span><strong>${products.length}</strong><small>de 100 disponibles</small><div class="progress"><i style="width:${products.length}%"></i></div></article><article class="metric-card coral"><span>Stock por reponer</span><strong>${lowStock.length}</strong><small class="warning">Requieren atención</small><div class="stock-dots">● ● ● ● ● ●</div></article></div><div class="dashboard-grid"><section class="panel sales-panel"><div class="panel-head"><div><h2>Actividad reciente</h2><p>Últimas ventas registradas</p></div><button class="text-button" data-view="Ventas">Ver todas →</button></div>${sales.length ? `<div class="sale-list">${sales.slice(-5).reverse().map(saleRow).join('')}</div>` : emptyState('Aún no hay ventas', 'Registra tu primera venta para verla aquí.')}</section><section class="panel"><div class="panel-head"><div><h2>Atención rápida</h2><p>Productos con stock bajo</p></div><button class="text-button" data-view="Inventario">Ver inventario →</button></div>${lowStock.length ? `<div class="low-list">${lowStock.slice(0, 4).map((product) => `<div class="low-item"><div class="product-avatar">${product.name.charAt(0)}</div><div><strong>${product.name}</strong><small>${product.sku}</small></div><b class="stock-badge">${product.stock} uds.</b></div>`).join('')}</div>` : emptyState('Todo en orden', 'No tienes productos por debajo del mínimo.')}</section></div>` }
 function saleRow(sale: Sale) { return `<div class="sale-row"><div class="sale-symbol">↗</div><div><strong>${sale.productName}</strong><small>${sale.quantity} unidad${sale.quantity > 1 ? 'es' : ''} · ${sale.date}</small></div><b>${money(sale.total)}</b></div>` }
