@@ -22,6 +22,10 @@ let lastPersistedSalesCount = sales.length
 let suppressMovementCapture = false
 let pendingMovementNote = ''
 let cloudMovementHistory = false
+let movementSearch = ''
+let movementTypeFilter = 'Todos'
+let movementStartDate = ''
+let movementEndDate = ''
 let categories: string[] = JSON.parse(localStorage.getItem('sv-categories-ao') || JSON.stringify(['Papelería', 'Escritura', 'Libros', 'Manualidades', 'Otros']))
 let currentRole: Role = 'seller'
 let activeView = 'Inicio'
@@ -187,6 +191,25 @@ function inventoryRows(search = '', category = 'Todas', status = 'Todos') {
   return groups.map((group) => `<section class="inventory-category"><header><div><h3>${group.name}</h3><p>${group.products.length} producto${group.products.length === 1 ? '' : 's'}</p></div><strong>${group.products.reduce((sum, product) => sum + product.stock, 0)} uds.</strong></header><div class="inventory-bars">${group.products.map((product) => `<div class="bar-row"><div class="inventory-product"><strong>${product.name}</strong><small>${product.sku} · mínimo ${product.min}</small></div><div class="bar"><i class="${product.stock <= product.min ? 'low' : ''}" style="width:${Math.min(product.stock / Math.max(product.min * 2, 1) * 100, 100)}%"></i></div><b class="${product.stock <= product.min ? 'stock-low' : 'stock-ok'}">${product.stock} uds.</b></div>`).join('')}</div></section>`).join('')
 }
 function inventoryView() { const value = products.reduce((sum, product) => sum + product.stock * product.price, 0); return `<section class="metric-grid compact"><article class="metric-card white"><span>Valor del inventario</span><strong>${money(value)}</strong><small>Precio de venta estimado</small></article><article class="metric-card white"><span>Unidades totales</span><strong>${products.reduce((sum, p) => sum + p.stock, 0)}</strong><small>En ${products.length} productos</small></article><article class="metric-card white"><span>Alertas activas</span><strong>${products.filter((p) => p.stock <= p.min).length}</strong><small class="warning">Stock bajo o agotado</small></article></section><section class="panel table-panel inventory-panel"><div class="panel-head"><div><h2>Control de existencias</h2><p>Productos ordenados por categoría</p></div><div class="inventory-filters"><input class="search" id="inventory-search" placeholder="⌕  Buscar producto o SKU..." /><select class="search" id="inventory-category"><option value="Todas">Todas las categorías</option>${[...new Set([...categories, ...products.map((product) => product.category)])].map((name) => `<option value="${name}">${name}</option>`).join('')}</select><select class="search" id="inventory-status"><option value="Todos">Todos los estados</option><option value="Normal">Stock normal</option><option value="Bajo">Stock bajo</option><option value="Agotado">Agotados</option></select></div></div><div id="inventory-groups">${inventoryRows()}</div></section>` }
+const movementLabels: Record<MovementKind, string> = { entry: 'Entrada', sale: 'Venta', adjustment: 'Ajuste', return: 'Devolución' }
+function filteredStockMovements() {
+  const term = movementSearch.trim().toLowerCase()
+  return stockMovements.filter((movement) => {
+    const date = movement.date.slice(0, 10)
+    return (movementTypeFilter === 'Todos' || movement.kind === movementTypeFilter) &&
+      (!movementStartDate || date >= movementStartDate) && (!movementEndDate || date <= movementEndDate) &&
+      (!term || `${movement.productName} ${movement.sku} ${movement.note} ${movement.actor}`.toLowerCase().includes(term))
+  })
+}
+function renderMovementRows() {
+  const rows = filteredStockMovements()
+  if (!rows.length) return '<tr><td colspan="7"><div class="empty"><strong>No hay movimientos para mostrar</strong><p>Prueba otros filtros o registra una entrada de stock.</p></div></td></tr>'
+  return rows.map((movement) => `<tr><td>${new Intl.DateTimeFormat('es-BO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(movement.date))}</td><td><strong>${movement.productName}</strong><small class="movement-subline">${movement.sku} · ${movement.category}</small></td><td><span class="movement-type ${movement.kind}">${movementLabels[movement.kind]}</span></td><td class="movement-delta ${movement.delta < 0 ? 'negative' : 'positive'}">${movement.delta > 0 ? '+' : ''}${movement.delta} uds.</td><td>${movement.before} → ${movement.after}</td><td>${movement.note || '—'}</td><td>${movement.actor}</td></tr>`).join('')
+}
+function movementHistoryView() {
+  const migrationNotice = supabase && !cloudMovementHistory ? '<p class="movement-notice">Mostrando movimientos guardados en este dispositivo. Para sincronizar el historial entre usuarios, aplica la migración SQL del proyecto.</p>' : ''
+  return `<section class="view-toolbar"><div><p class="subtle">Trazabilidad de entradas, ventas, ajustes y devoluciones.</p></div><button class="primary" data-action="new-stock-movement">+ Registrar movimiento</button></section><section class="panel table-panel movement-panel"><div class="panel-head"><div><h2>Historial de inventario</h2><p class="movement-count">${filteredStockMovements().length} movimientos registrados</p></div><div class="movement-filters"><input class="search" data-movement-filter="search" value="${movementSearch}" placeholder="⌕ Producto, SKU o nota..." /><select class="search" data-movement-filter="type"><option value="Todos">Todos los tipos</option>${Object.entries(movementLabels).map(([value, label]) => `<option value="${value}" ${movementTypeFilter === value ? 'selected' : ''}>${label}</option>`).join('')}</select><label>Desde<input class="search" data-movement-filter="start" type="date" value="${movementStartDate}" /></label><label>Hasta<input class="search" data-movement-filter="end" type="date" value="${movementEndDate}" /></label></div></div>${migrationNotice}<div class="table-wrap"><table class="movement-table"><thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cambio</th><th>Stock</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody id="movement-rows">${renderMovementRows()}</tbody></table></div></section>`
+}
 function reportsView() {
   const { start, end } = getReportRange()
   const filteredSales = filterSalesByRange(start, end)
