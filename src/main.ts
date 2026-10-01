@@ -21,6 +21,7 @@ let lastPersistedStock = new Map(products.map((product) => [product.id, product.
 let lastPersistedSalesCount = sales.length
 let suppressMovementCapture = false
 let pendingMovementNote = ''
+let pendingMovementKind: MovementKind | null = null
 let cloudMovementHistory = false
 let movementSearch = ''
 let movementTypeFilter = 'Todos'
@@ -55,12 +56,13 @@ function persist() {
     products.forEach((product) => {
       const before = lastPersistedStock.get(product.id) ?? 0
       const delta = product.stock - before
-      if (delta) appendStockMovement(product, isSale ? 'sale' : delta > 0 ? 'entry' : 'adjustment', delta, before, pendingMovementNote)
+      if (delta) appendStockMovement(product, pendingMovementKind || (isSale ? 'sale' : delta > 0 ? 'entry' : 'adjustment'), delta, before, pendingMovementNote)
     })
   }
   lastPersistedStock = new Map(products.map((product) => [product.id, product.stock]))
   lastPersistedSalesCount = sales.length
   pendingMovementNote = ''
+  pendingMovementKind = null
   localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole)
 }
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
@@ -151,6 +153,7 @@ function render() {
   const lowStock = products.filter((product) => product.stock <= product.min)
   const content = activeView === 'Inicio' ? dashboard(revenue, todaySales.length, lowStock) : activeView === 'Ventas' ? salesView() : activeView === 'Productos' ? productsView() : activeView === 'Inventario' ? inventoryView() : activeView === 'Movimientos' ? movementHistoryView() : reportsView()
   document.querySelector<HTMLDivElement>('#app')!.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">A&O</div><div><strong>Librería A&O</strong><small>papelería y libros</small></div></div><nav>${['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'].map((item) => `<button class="nav-item ${activeView === item ? 'active' : ''}" data-view="${item}">${icon({ Inicio: '⌂', Ventas: '↗', Productos: '▦', Inventario: '◫', Reportes: '▥' }[item] || '')}<span>${item}</span></button>`).join('')}</nav><div class="sidebar-foot"><div class="avatar">AO</div><div><strong>${roleName()}</strong><small>Sesión local</small></div><button class="more">•••</button></div></aside><main><header><div><p class="eyebrow">${formatLongDate()}</p><h1>${activeView === 'Inicio' ? 'Buenos días, A&O' : activeView}</h1></div><div class="header-actions"><button class="icon-button" aria-label="Notificaciones">♢<span class="dot"></span></button><div class="profile-menu"><button class="profile" data-action="toggle-profile" aria-expanded="false">AO <span>⌄</span></button><div class="role-menu" hidden><p>CAMBIAR USUARIO</p><button data-role="admin"><span class="role-avatar">AO</span><span><strong>Administrador</strong><small>Acceso completo</small></span><b>✓</b></button><button data-role="seller"><span class="role-avatar seller">VE</span><span><strong>Vendedor</strong><small>Registrar ventas</small></span><b></b></button></div></div></div></header>${content}</main></div><div id="modal-root"></div>`
+  if (currentRole === 'admin') document.querySelector('nav')?.insertAdjacentHTML('beforeend', `<button class="nav-item ${activeView === 'Movimientos' ? 'active' : ''}" data-view="Movimientos">${icon('⇄')}<span>Movimientos</span></button>`)
   bindEvents()
   applyRoleAccess()
 }
