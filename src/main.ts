@@ -21,6 +21,7 @@ let lastPersistedStock = new Map(products.map((product) => [product.id, product.
 let lastPersistedSalesCount = sales.length
 let suppressMovementCapture = false
 let pendingMovementNote = ''
+let cloudMovementHistory = false
 let categories: string[] = JSON.parse(localStorage.getItem('sv-categories-ao') || JSON.stringify(['Papelería', 'Escritura', 'Libros', 'Manualidades', 'Otros']))
 let currentRole: Role = 'seller'
 let activeView = 'Inicio'
@@ -110,10 +111,33 @@ async function handleLogin(event: SubmitEvent) { event.preventDefault(); if (!su
 async function loadRole() { if (!supabase || !authUser) return; const { data } = await supabase.from('profiles').select('role').eq('id', authUser.id).maybeSingle(); currentRole = data?.role === 'admin' ? 'admin' : 'seller' }
 async function signOut() { if (supabase) await supabase.auth.signOut(); authUser = null; currentRole = 'seller'; activeView = 'Inicio'; renderLogin() }
 async function loadCloudData() { if (!supabase) return; const { data: cloudProducts } = await supabase.from('products').select('id,name,sku,price,stock,min_stock,category:categories(name)').order('id'); const { data: cloudCategories } = await supabase.from('categories').select('name').order('name'); const { data: cloudSales } = await supabase.from('sales').select('id,total,created_at,sale_items(quantity,product_id,products(name))').order('created_at', { ascending: false }); if (cloudProducts?.length) products = cloudProducts.map((item: any) => ({ id: item.id, name: item.name, sku: item.sku, category: item.category?.name || 'Otros', price: Number(item.price), stock: item.stock, min: item.min_stock })); if (cloudCategories?.length) categories = cloudCategories.map((item) => item.name); if (cloudSales) sales = cloudSales.flatMap((sale: any) => (sale.sale_items || []).map((item: any) => ({ id: sale.id + item.product_id, productId: item.product_id, productName: item.products?.name || 'Producto', quantity: item.quantity, total: Number(sale.total), date: localDateKey(new Date(sale.created_at)) }))); lastCloudSalesCount = sales.length; lastSalesCount = sales.length; persist() }
+async function loadCloudMovements() {
+  if (!supabase) return
+  const { data, error } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(500)
+  if (error || !data) { cloudMovementHistory = false; return }
+  stockMovements = data.map((movement: any) => ({
+    id: String(movement.id), productId: movement.product_id, productName: movement.product_name,
+    sku: movement.sku, category: movement.category_name, kind: movement.movement_type,
+    delta: movement.quantity_delta, before: movement.stock_before, after: movement.stock_after,
+    note: movement.note || '', date: movement.created_at, actor: movement.actor_label || 'Usuario',
+  }))
+  cloudMovementHistory = true
+  persist()
+}
 async function syncCatalog() { if (!supabase || currentRole !== 'admin') return null; const categoryResult = await supabase.from('categories').upsert(categories.map((name) => ({ name })), { onConflict: 'name' }); if (categoryResult.error) throw new Error(`No se pudieron guardar las categorías: ${categoryResult.error.message}`); const { data: cloudCategories, error: categoryReadError } = await supabase.from('categories').select('id,name'); if (categoryReadError) throw new Error(`No se pudieron leer las categorías: ${categoryReadError.message}`); const categoryIds = new Map((cloudCategories || []).map((item) => [item.name, item.id])); const productResult = await supabase.from('products').upsert(products.map((product) => ({ id: product.id, name: product.name, sku: product.sku, category_id: categoryIds.get(product.category), price: product.price, stock: product.stock, min_stock: product.min })), { onConflict: 'sku' }); if (productResult.error) throw new Error(`No se pudieron guardar los productos: ${productResult.error.message}`); return true }
 async function syncNewSales() { if (!supabase || !authUser) return; const pending = sales.slice(lastCloudSalesCount); for (const sale of pending) { const { error } = await supabase.rpc('create_sale', { items: [{ product_id: sale.productId, quantity: sale.quantity }] }); if (error) throw new Error(`No se pudo guardar la venta: ${error.message}`) } lastCloudSalesCount = sales.length }
 async function syncCloudWithFeedback() { try { await syncCatalog() } catch (error) { alert(error instanceof Error ? error.message : 'No se pudieron sincronizar los datos con Supabase.') } }
-async function initializeAuth() { if (!supabase) return renderLogin('Configura Supabase para iniciar sesión.'); const { data } = await supabase.auth.getSession(); if (data.session?.user) { authUser = { id: data.session.user.id, email: data.session.user.email }; await loadRole(); await loadCloudData(); return render() } renderLogin() }
+async function initializeAuth() {
+  if (!supabase) return renderLogin('Configura Supabase para iniciar sesión.')
+  const { data } = await supabase.auth.getSession()
+  if (!data.session?.user) return renderLogin()
+  authUser = { id: data.session.user.id, email: data.session.user.email }
+  await loadRole()
+  suppressMovementCapture = true
+  try { await loadCloudData() } finally { suppressMovementCapture = false }
+  await loadCloudMovements()
+  render()
+}
 
 function render() {
   if (!allowedViews().includes(activeView)) activeView = 'Ventas'
@@ -121,7 +145,7 @@ function render() {
   const todaySales = sales.filter((sale) => sale.date === todayDateKey)
   const revenue = todaySales.reduce((sum, sale) => sum + sale.total, 0)
   const lowStock = products.filter((product) => product.stock <= product.min)
-  const content = activeView === 'Inicio' ? dashboard(revenue, todaySales.length, lowStock) : activeView === 'Ventas' ? salesView() : activeView === 'Productos' ? productsView() : activeView === 'Inventario' ? inventoryView() : reportsView()
+  const content = activeView === 'Inicio' ? dashboard(revenue, todaySales.length, lowStock) : activeView === 'Ventas' ? salesView() : activeView === 'Productos' ? productsView() : activeView === 'Inventario' ? inventoryView() : activeView === 'Movimientos' ? movementHistoryView() : reportsView()
   document.querySelector<HTMLDivElement>('#app')!.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">A&O</div><div><strong>Librería A&O</strong><small>papelería y libros</small></div></div><nav>${['Inicio', 'Ventas', 'Productos', 'Inventario', 'Reportes'].map((item) => `<button class="nav-item ${activeView === item ? 'active' : ''}" data-view="${item}">${icon({ Inicio: '⌂', Ventas: '↗', Productos: '▦', Inventario: '◫', Reportes: '▥' }[item] || '')}<span>${item}</span></button>`).join('')}</nav><div class="sidebar-foot"><div class="avatar">AO</div><div><strong>${roleName()}</strong><small>Sesión local</small></div><button class="more">•••</button></div></aside><main><header><div><p class="eyebrow">${formatLongDate()}</p><h1>${activeView === 'Inicio' ? 'Buenos días, A&O' : activeView}</h1></div><div class="header-actions"><button class="icon-button" aria-label="Notificaciones">♢<span class="dot"></span></button><div class="profile-menu"><button class="profile" data-action="toggle-profile" aria-expanded="false">AO <span>⌄</span></button><div class="role-menu" hidden><p>CAMBIAR USUARIO</p><button data-role="admin"><span class="role-avatar">AO</span><span><strong>Administrador</strong><small>Acceso completo</small></span><b>✓</b></button><button data-role="seller"><span class="role-avatar seller">VE</span><span><strong>Vendedor</strong><small>Registrar ventas</small></span><b></b></button></div></div></div></header>${content}</main></div><div id="modal-root"></div>`
   bindEvents()
   applyRoleAccess()
