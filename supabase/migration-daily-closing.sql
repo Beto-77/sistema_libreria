@@ -9,6 +9,8 @@ create table if not exists public.daily_closures (
 );
 
 alter table public.daily_closures enable row level security;
+revoke all on public.daily_closures from anon;
+grant select on public.daily_closures to authenticated;
 drop policy if exists "Authenticated users read daily closures" on public.daily_closures;
 create policy "Authenticated users read daily closures" on public.daily_closures
 for select to authenticated using (true);
