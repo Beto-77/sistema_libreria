@@ -17,6 +17,10 @@ const starterProducts: Product[] = [
 let products: Product[] = JSON.parse(localStorage.getItem('sv-products-ao') || JSON.stringify(starterProducts))
 let sales: Sale[] = JSON.parse(localStorage.getItem('sv-sales-ao') || '[]')
 let stockMovements: StockMovement[] = JSON.parse(localStorage.getItem('sv-stock-movements-ao') || '[]')
+let lastPersistedStock = new Map(products.map((product) => [product.id, product.stock]))
+let lastPersistedSalesCount = sales.length
+let suppressMovementCapture = false
+let pendingMovementNote = ''
 let categories: string[] = JSON.parse(localStorage.getItem('sv-categories-ao') || JSON.stringify(['Papelería', 'Escritura', 'Libros', 'Manualidades', 'Otros']))
 let currentRole: Role = 'seller'
 let activeView = 'Inicio'
@@ -37,7 +41,23 @@ const formatLongDate = (date = new Date()) => new Intl.DateTimeFormat('es-ES', {
 }).format(date).replace(/^\w/, (char) => char.toUpperCase())
 
 const money = (value: number) => `Bs ${value.toFixed(2)}`
-const persist = () => { localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole) }
+function appendStockMovement(product: Product, kind: MovementKind, delta: number, before: number, note = '', date = new Date().toISOString(), id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`) {
+  stockMovements.unshift({ id, productId: product.id, productName: product.name, sku: product.sku, category: product.category, kind, delta, before, after: before + delta, note, date, actor: authUser?.email || roleName() })
+}
+function persist() {
+  if (!suppressMovementCapture) {
+    const isSale = sales.length > lastPersistedSalesCount
+    products.forEach((product) => {
+      const before = lastPersistedStock.get(product.id) ?? 0
+      const delta = product.stock - before
+      if (delta) appendStockMovement(product, isSale ? 'sale' : delta > 0 ? 'entry' : 'adjustment', delta, before, pendingMovementNote)
+    })
+  }
+  lastPersistedStock = new Map(products.map((product) => [product.id, product.stock]))
+  lastPersistedSalesCount = sales.length
+  pendingMovementNote = ''
+  localStorage.setItem('sv-products-ao', JSON.stringify(products)); localStorage.setItem('sv-sales-ao', JSON.stringify(sales)); localStorage.setItem('sv-stock-movements-ao', JSON.stringify(stockMovements)); localStorage.setItem('sv-categories-ao', JSON.stringify(categories)); localStorage.setItem('sv-role-ao', currentRole)
+}
 const roleName = () => currentRole === 'admin' ? 'Administrador' : 'Vendedor'
 const allowedViews = () => currentRole === 'admin' ? ['Inicio', 'Ventas', 'Productos', 'Inventario', 'Movimientos', 'Reportes'] : ['Inicio', 'Ventas']
 const icon = (value: string) => `<span class="nav-icon">${value}</span>`
